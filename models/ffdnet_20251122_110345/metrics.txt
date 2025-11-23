@@ -1,0 +1,18 @@
+FFDNet Training Summary
+========================
+Model: ffdnet_20251122_110345
+Timestamp: 20251122_110345
+
+Final Metrics (Validation Set):
+- Best Val Loss (MSE): 0.006709
+- Pixel MSE (binned): 0.8634
+- Pixel MAE (binned): 0.6588
+
+Training Configuration:
+- Epochs: 15
+- Initial LR: 0.001
+- LR Drop Epoch: 10
+- Patch Size: 64x64
+- Batch Size: 16
+- Depth: 17
+- Sigma: 0.18 (45.9 in [0,255] scale)

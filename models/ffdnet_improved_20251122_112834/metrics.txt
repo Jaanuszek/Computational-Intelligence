@@ -1,0 +1,24 @@
+Improved FFDNet Training Summary
+==================================
+Model: ffdnet_improved_20251122_112834
+Timestamp: 20251122_112834
+
+Architecture Improvements:
+- Depth: 20 layers (vs 17)
+- Normalization: Instance Norm (vs Batch Norm)
+- Loss: MSE + Perceptual (VGG-based)
+
+Final Metrics (Validation Set):
+- Best Val Loss: 0.151671
+- Pixel MSE (binned): 0.3940
+- Pixel MAE (binned): 0.3658
+
+Training Configuration:
+- Epochs: 30
+- Initial LR: 0.0005
+- LR Drops: [15, 25]
+- MSE Weight: 1.0
+- Perceptual Weight: 0.1
+- Patch Size: 64x64
+- Batch Size: 16
+- Sigma: 0.18 (45.9 in [0,255] scale)
