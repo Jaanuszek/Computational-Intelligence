@@ -115,7 +115,7 @@ class FFDNet(nn.Module):
         # Space-to-depth: [B, C, H, W] -> [B, C*4, H/2, W/2]
         x_down = self.space_to_depth(x)
         
-        # Downscale noise map to match
+        # Downscale noise map to match - use avg_pool2d as in original implementation
         sigma_down = F_torch.avg_pool2d(sigma_map, kernel_size=2)
         
         # Concatenate: [B, C*4+1, H/2, W/2]
@@ -177,19 +177,28 @@ class EarlyStopping:
                 self.early_stop = True
 
 
-def train_epoch(model, train_loader, criterion, optimizer, device, sigma):
+def train_epoch(model, train_loader, criterion, optimizer, device, default_sigma):
     """Train for one epoch"""
     model.train()
     train_loss = 0.0
     
-    for noisy_patches, clean_patches in train_loader:
+    for batch in train_loader:
+        if len(batch) == 3:
+            noisy_patches, clean_patches, sigmas = batch
+            # sigmas is a tensor of shape [batch_size]
+            # Create noise level map from per-image sigma
+            batch_size = noisy_patches.size(0)
+            sigma_map = sigmas.view(batch_size, 1, 1, 1).expand(batch_size, 1, noisy_patches.size(2), noisy_patches.size(3)).float().to(device)
+            sigma_map = sigma_map / 255.0 # Normalize
+        else:
+            noisy_patches, clean_patches = batch
+            # Create noise level map - normalize sigma to [0,1] range
+            batch_size = noisy_patches.size(0)
+            sigma_map = torch.full((batch_size, 1, noisy_patches.size(2), noisy_patches.size(3)), 
+                                default_sigma / 255.0, dtype=torch.float32, device=device)
+
         noisy_patches = noisy_patches.to(device)
         clean_patches = clean_patches.to(device)
-        
-        # Create noise level map (constant for all pixels)
-        batch_size = noisy_patches.size(0)
-        sigma_map = torch.full((batch_size, 1, noisy_patches.size(2), noisy_patches.size(3)), 
-                               sigma / 255.0, device=device)
         
         optimizer.zero_grad()
         
@@ -226,7 +235,7 @@ def validate_epoch(model, val_loader, criterion, device, sigma, save_samples=Fal
             
             batch_size = noisy_patches.size(0)
             sigma_map = torch.full((batch_size, 1, noisy_patches.size(2), noisy_patches.size(3)),
-                                   sigma / 255.0, device=device)
+                                   sigma / 255.0, dtype=torch.float32, device=device)
             
             predicted_noise = model(noisy_patches, sigma_map)
             denoised = noisy_patches - predicted_noise
@@ -263,7 +272,7 @@ def visualize_results(model, test_loader, device, sigma, num_samples=4):
         
         batch_size = noisy_patches.size(0)
         sigma_map = torch.full((batch_size, 1, noisy_patches.size(2), noisy_patches.size(3)),
-                               sigma / 255.0, device=device)
+                               sigma / 255.0, dtype=torch.float32, device=device)
         
         predicted_noise = model(noisy_patches, sigma_map)
         denoised_patches = noisy_patches - predicted_noise
@@ -310,7 +319,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # Transform
+    # Transform - ToTensor normalizes to [0,1]
     transform = transforms.Compose([
         transforms.Resize((config.image_size, config.image_size)),
         transforms.ToTensor(),
@@ -318,16 +327,18 @@ def main():
     
     # Create datasets
     print("Loading datasets...")
-    train_dataset = NoisyImageDataset.NoisyImageDataset(
+    # Use DynamicNoisyDataset for training to handle variable noise levels [0, 75]
+    train_dataset = NoisyImageDataset.DynamicNoisyDataset(
         clear_image_dir=config.clean_train_dir,
-        noisy_image_dir=config.noisy_train_dir,
-        sigma=25,
+        sigma_min=0,
+        sigma_max=75,
         patch_size=config.patch_size,
         stride=config.stride,
-        cache_path=dataset.PREPROCESSED_TRAIN_DIR.replace('train_patches.pt', 'ffdnet_train_patches.pt'),
+        cache_path=dataset.PREPROCESSED_TRAIN_DIR.replace('train_patches.pt', 'ffdnet_dynamic_train_patches.pt'),
         transform=transform
     )
     
+    # Keep validation on fixed sigma=25 for stable comparison
     val_dataset = NoisyImageDataset.NoisyImageDataset(
         clear_image_dir=config.clean_val_dir,
         noisy_image_dir=config.noisy_val_dir,
@@ -399,7 +410,7 @@ def main():
     
     # Training loop
     print(f"\nStarting training for {config.num_epochs} epochs...")
-    print(f"Noise level (sigma): {config.sigma_train}\n")
+    print(f"Noise level (sigma): Dynamic [0, 75]\n")
     
     for epoch in range(config.num_epochs):
         # Train

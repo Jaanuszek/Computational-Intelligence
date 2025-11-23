@@ -98,10 +98,13 @@ def compare_models(ffdnet_model, dncnn_model, image_path, sigma=25, device='cuda
     ffdnet_time = time.time() - start
     
     # Denoise with DnCNN
-    print("Denoising with DnCNN...")
-    start = time.time()
-    dncnn_result = denoise_dncnn(dncnn_model, image_path, device)
-    dncnn_time = time.time() - start
+    dncnn_result = None
+    dncnn_time = 0
+    if dncnn_model is not None:
+        print("Denoising with DnCNN...")
+        start = time.time()
+        dncnn_result = denoise_dncnn(dncnn_model, image_path, device)
+        dncnn_time = time.time() - start
     
     # Try to load ground truth if available
     # Assuming ground truth might be in a parallel directory
@@ -124,29 +127,40 @@ def compare_models(ffdnet_model, dncnn_model, image_path, sigma=25, device='cuda
             factors = (ground_truth.shape[0] / ffdnet_result.shape[0],
                       ground_truth.shape[1] / ffdnet_result.shape[1])
             ffdnet_result_resized = zoom(ffdnet_result, factors, order=1)
-            dncnn_result_resized = zoom(dncnn_result, factors, order=1)
+            if dncnn_result is not None:
+                dncnn_result_resized = zoom(dncnn_result, factors, order=1)
         else:
             ffdnet_result_resized = ffdnet_result
-            dncnn_result_resized = dncnn_result
+            if dncnn_result is not None:
+                dncnn_result_resized = dncnn_result
         
         ffdnet_psnr = calculate_psnr(ground_truth, ffdnet_result_resized)
-        dncnn_psnr = calculate_psnr(ground_truth, dncnn_result_resized)
-        
         ffdnet_ssim = calculate_ssim(ground_truth, ffdnet_result_resized)
-        dncnn_ssim = calculate_ssim(ground_truth, dncnn_result_resized)
+        
+        if dncnn_result is not None:
+            dncnn_psnr = calculate_psnr(ground_truth, dncnn_result_resized)
+            dncnn_ssim = calculate_ssim(ground_truth, dncnn_result_resized)
         
         print(f"\n{'='*60}")
         print(f"{'Metric':<20} {'FFDNet':<20} {'DnCNN':<20}")
         print(f"{'='*60}")
-        print(f"{'PSNR (dB)':<20} {ffdnet_psnr:>19.4f} {dncnn_psnr:>19.4f}")
-        print(f"{'SSIM':<20} {ffdnet_ssim:>19.4f} {dncnn_ssim:>19.4f}")
-        print(f"{'Time (s)':<20} {ffdnet_time:>19.4f} {dncnn_time:>19.4f}")
+        if dncnn_result is not None:
+            print(f"{'PSNR (dB)':<20} {ffdnet_psnr:>19.4f} {dncnn_psnr:>19.4f}")
+            print(f"{'SSIM':<20} {ffdnet_ssim:>19.4f} {dncnn_ssim:>19.4f}")
+            print(f"{'Time (s)':<20} {ffdnet_time:>19.4f} {dncnn_time:>19.4f}")
+        else:
+            print(f"{'PSNR (dB)':<20} {ffdnet_psnr:>19.4f} {'N/A':>19}")
+            print(f"{'SSIM':<20} {ffdnet_ssim:>19.4f} {'N/A':>19}")
+            print(f"{'Time (s)':<20} {ffdnet_time:>19.4f} {'N/A':>19}")
         print(f"{'='*60}\n")
     else:
         print(f"\n{'='*60}")
         print(f"{'Metric':<20} {'FFDNet':<20} {'DnCNN':<20}")
         print(f"{'='*60}")
-        print(f"{'Time (s)':<20} {ffdnet_time:>19.4f} {dncnn_time:>19.4f}")
+        if dncnn_result is not None:
+            print(f"{'Time (s)':<20} {ffdnet_time:>19.4f} {dncnn_time:>19.4f}")
+        else:
+            print(f"{'Time (s)':<20} {ffdnet_time:>19.4f} {'N/A':>19}")
         print(f"{'='*60}")
         print("(Ground truth not available for PSNR/SSIM calculation)\n")
     
@@ -162,8 +176,11 @@ def compare_models(ffdnet_model, dncnn_model, image_path, sigma=25, device='cuda
         axes[0, 1].set_title(f'FFDNet\nPSNR: {ffdnet_psnr:.2f} dB')
         axes[0, 1].axis('off')
         
-        axes[0, 2].imshow(dncnn_result, cmap='gray', vmin=0, vmax=1)
-        axes[0, 2].set_title(f'DnCNN\nPSNR: {dncnn_psnr:.2f} dB')
+        if dncnn_result is not None:
+            axes[0, 2].imshow(dncnn_result, cmap='gray', vmin=0, vmax=1)
+            axes[0, 2].set_title(f'DnCNN\nPSNR: {dncnn_psnr:.2f} dB')
+        else:
+            axes[0, 2].text(0.5, 0.5, 'DnCNN Not Available', ha='center', va='center')
         axes[0, 2].axis('off')
         
         axes[1, 0].imshow(ground_truth, cmap='gray', vmin=0, vmax=1)
@@ -172,14 +189,16 @@ def compare_models(ffdnet_model, dncnn_model, image_path, sigma=25, device='cuda
         
         # Error maps
         ffdnet_error = np.abs(ground_truth - ffdnet_result_resized)
-        dncnn_error = np.abs(ground_truth - dncnn_result_resized)
-        
         axes[1, 1].imshow(ffdnet_error, cmap='hot', vmin=0, vmax=0.2)
         axes[1, 1].set_title('FFDNet Error Map')
         axes[1, 1].axis('off')
         
-        axes[1, 2].imshow(dncnn_error, cmap='hot', vmin=0, vmax=0.2)
-        axes[1, 2].set_title('DnCNN Error Map')
+        if dncnn_result is not None:
+            dncnn_error = np.abs(ground_truth - dncnn_result_resized)
+            axes[1, 2].imshow(dncnn_error, cmap='hot', vmin=0, vmax=0.2)
+            axes[1, 2].set_title('DnCNN Error Map')
+        else:
+            axes[1, 2].text(0.5, 0.5, 'DnCNN Not Available', ha='center', va='center')
         axes[1, 2].axis('off')
     else:
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -192,8 +211,11 @@ def compare_models(ffdnet_model, dncnn_model, image_path, sigma=25, device='cuda
         axes[1].set_title(f'FFDNet ({ffdnet_time:.3f}s)')
         axes[1].axis('off')
         
-        axes[2].imshow(dncnn_result, cmap='gray', vmin=0, vmax=1)
-        axes[2].set_title(f'DnCNN ({dncnn_time:.3f}s)')
+        if dncnn_result is not None:
+            axes[2].imshow(dncnn_result, cmap='gray', vmin=0, vmax=1)
+            axes[2].set_title(f'DnCNN ({dncnn_time:.3f}s)')
+        else:
+            axes[2].text(0.5, 0.5, 'DnCNN Not Available', ha='center', va='center')
         axes[2].axis('off')
     
     plt.tight_layout()
@@ -249,8 +271,8 @@ def main():
                 break
         
         if not loaded:
-            print("✗ DnCNN model not found. Please train DnCNN first or specify correct path.")
-            return
+            print("✗ DnCNN model not found. Proceeding with FFDNet only.")
+            dncnn_model = None
     
     # Find test image
     import dataset

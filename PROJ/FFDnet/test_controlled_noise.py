@@ -167,8 +167,14 @@ if __name__ == "__main__":
     
     model_path = 'ffdnet_model.pth'
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-        print(f"✓ Loaded model from {model_path}\n")
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+        # Handle both checkpoint dict and direct state_dict
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print(f"✓ Loaded model from {model_path} (epoch {checkpoint.get('epoch', 'unknown')})\n")
+        else:
+            model.load_state_dict(checkpoint)
+            print(f"✓ Loaded model from {model_path}\n")
     else:
         print(f"Model {model_path} not found!")
         sys.exit(1)
