@@ -1,23 +1,25 @@
 from includes import *
 
-MAIN_DIR = "PROJ/"
-DATASET_DIR = MAIN_DIR + "datasets/"
+# Get absolute path to the PROJ directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MAIN_DIR = SCRIPT_DIR
+DATASET_DIR = os.path.join(MAIN_DIR, "datasets")
 
-ORIGINAL_TEST_GROUND_TRUTH_DIR = DATASET_DIR + "Original/test/ground_truth/"
-ORIGINAL_TRAIN_GROUND_TRUTH_DIR = DATASET_DIR + "Original/train/ground_truth/"
-ORIGINAL_VALIDATE_GROUND_TRUTH_DIR = DATASET_DIR + "Original/validate/ground_truth/"
+ORIGINAL_TEST_GROUND_TRUTH_DIR = os.path.join(DATASET_DIR, "Original/test/ground_truth/")
+ORIGINAL_TRAIN_GROUND_TRUTH_DIR = os.path.join(DATASET_DIR, "Original/train/ground_truth/")
+ORIGINAL_VALIDATE_GROUND_TRUTH_DIR = os.path.join(DATASET_DIR, "Original/validate/ground_truth/")
 
-GRAY_TEST_DIR= DATASET_DIR + "Gray/test/"
-GRAY_TRAIN_DIR= DATASET_DIR + "Gray/train/"
-GRAY_VALIDATE_DIR= DATASET_DIR + "Gray/validate/"
+GRAY_TEST_DIR = os.path.join(DATASET_DIR, "Gray/test/")
+GRAY_TRAIN_DIR = os.path.join(DATASET_DIR, "Gray/train/")
+GRAY_VALIDATE_DIR = os.path.join(DATASET_DIR, "Gray/validate/")
 
-NOISY_TEST_DIR= DATASET_DIR + "Noisy/test/"
-NOISY_TRAIN_DIR= DATASET_DIR + "Noisy/train/"
-NOISY_VALIDATE_DIR= DATASET_DIR + "Noisy/validate/"
+NOISY_TEST_DIR = os.path.join(DATASET_DIR, "Noisy/test/")
+NOISY_TRAIN_DIR = os.path.join(DATASET_DIR, "Noisy/train/")
+NOISY_VALIDATE_DIR = os.path.join(DATASET_DIR, "Noisy/validate/")
 
-PREPROCESSED_TRAIN_DIR = DATASET_DIR + "Preprocessed/train_patches.pt"
-PREPROCESSED_TEST_DIR = DATASET_DIR + "Preprocessed/test_patches.pt"
-PREPROCESSED_VALIDATE_DIR = DATASET_DIR + "Preprocessed/validate_patches.pt"
+PREPROCESSED_TRAIN_DIR = os.path.join(DATASET_DIR, "Preprocessed/train_patches.pt")
+PREPROCESSED_TEST_DIR = os.path.join(DATASET_DIR, "Preprocessed/test_patches.pt")
+PREPROCESSED_VALIDATE_DIR = os.path.join(DATASET_DIR, "Preprocessed/validate_patches.pt")
 
 def download_dataset():
     if not os.path.isdir(ORIGINAL_TEST_GROUND_TRUTH_DIR):
@@ -26,10 +28,11 @@ def download_dataset():
     else:
         print("Dataset already exists locally.")
 
-def add_gaussian_noise(image, sigma):
+def add_gaussian_noise(image, sigma_255):
     """Adds Gaussian noise to an image.
         It assumes that image is normalized to [0, 1].
     """
+    sigma = sigma_255 / 255.0
     noise = np.random.normal(0, sigma, image.shape)
     noisy_image = image + noise
     noisy_image = np.clip(noisy_image, 0, 1)
