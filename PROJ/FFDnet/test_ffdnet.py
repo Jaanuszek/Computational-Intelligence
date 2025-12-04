@@ -61,7 +61,8 @@ def ffdnet_denoise_tiled(model, noisy_tensor, sigma, patch=64, overlap=16):
 # -------------------------------------------------------------
 def denoise_image(model, image_path, sigma=25, device='cuda'):
     """
-    Fully correct FFDNet inference identical to training preprocessing.
+    FFDNet inference on full image (no tiling).
+    Handles padding if dimensions are not divisible by 2.
     """
     if isinstance(device, str):
         device = torch.device(device)
@@ -72,11 +73,30 @@ def denoise_image(model, image_path, sigma=25, device='cuda'):
 
     # Convert to torch tensor
     noisy_tensor = torch.from_numpy(img_np).unsqueeze(0).unsqueeze(0).to(device)
+    
+    # FFDNet requires dimensions divisible by 2 (due to PixelUnshuffle)
+    _, _, H, W = noisy_tensor.shape
+    h_pad = (2 - H % 2) % 2
+    w_pad = (2 - W % 2) % 2
+    
+    if h_pad > 0 or w_pad > 0:
+        # Pad with reflection to avoid boundary artifacts
+        noisy_tensor = F_torch.pad(noisy_tensor, (0, w_pad, 0, h_pad), mode='reflect')
 
-    # Run tiled denoising
-    denoised = ffdnet_denoise_tiled(model, noisy_tensor, sigma, patch=64, overlap=16)
+    # Create sigma map
+    sigma_map = torch.full_like(noisy_tensor, sigma/255.0)
 
-    return denoised.squeeze().cpu().numpy()
+    # Run inference
+    model.eval()
+    with torch.no_grad():
+        predicted_noise = model(noisy_tensor, sigma_map)
+        denoised_tensor = noisy_tensor - predicted_noise
+
+    # Crop back to original size if padded
+    if h_pad > 0 or w_pad > 0:
+        denoised_tensor = denoised_tensor[:, :, :H, :W]
+
+    return denoised_tensor.squeeze().cpu().numpy()
 
 
 # -------------------------------------------------------------
@@ -95,7 +115,9 @@ def visualize_denoising(model, image_path, sigma=25, device='cuda'):
 
     # Try to find ground truth
     ground_truth = None
+    psnr_noisy = None
     psnr_val = None
+    improvement = None
     
     try:
         import dataset
@@ -116,6 +138,8 @@ def visualize_denoising(model, image_path, sigma=25, device='cuda'):
                 if gt_np.shape == denoised.shape:
                     ground_truth = gt_np
                     psnr_val = calculate_psnr(ground_truth, denoised)
+                    psnr_noisy = calculate_psnr(ground_truth, noisy)
+                    improvement = psnr_val - psnr_noisy
                     print(f"Found ground truth: {gt_path}")
                     print(f"PSNR: {psnr_val:.2f} dB")
                     break
@@ -125,16 +149,20 @@ def visualize_denoising(model, image_path, sigma=25, device='cuda'):
     if ground_truth is not None:
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
         
-        axes[0].imshow(noisy, cmap='gray', vmin=0, vmax=1)
-        axes[0].set_title(f'Noisy (σ={sigma})')
+        axes[0].imshow(ground_truth, cmap='gray', vmin=0, vmax=1)
+        axes[0].set_title('Ground Truth')
         axes[0].axis('off')
-        
-        axes[1].imshow(denoised, cmap='gray', vmin=0, vmax=1)
-        axes[1].set_title(f'FFDNet\nPSNR: {psnr_val:.2f} dB')
+
+        axes[1].imshow(noisy, cmap='gray', vmin=0, vmax=1)
+        axes[1].set_title(f'Noisy (σ={sigma})')
         axes[1].axis('off')
-        
-        axes[2].imshow(ground_truth, cmap='gray', vmin=0, vmax=1)
-        axes[2].set_title('Ground Truth')
+
+        color = 'black'
+        if improvement is not None:
+            color = 'green' if improvement > 0 else 'red'        
+        axes[2].imshow(denoised, cmap='gray', vmin=0, vmax=1)
+        axes[2].set_title(f'Denoised (FFDNet)\nPSNR: {psnr_val:.2f} dB ({improvement:+.2f} dB)',
+                          fontsize = 12, color = color, fontweight='bold')
         axes[2].axis('off')
     else:
         fig, axes = plt.subplots(1, 2, figsize=(12, 6))
@@ -142,10 +170,9 @@ def visualize_denoising(model, image_path, sigma=25, device='cuda'):
         axes[0].set_title(f'Noisy (σ={sigma})')
         axes[0].axis('off')
 
-        axes[1].imshow(denoised, cmap='gray', vmin=0, vmax=1)
-        axes[1].set_title('FFDNet (tiled inference)')
-        axes[1].axis('off')
-
+    # axes[1].imshow(denoised, cmap='gray', vmin=0, vmax=1)
+    # axes[1].set_title('FFDNet (full image)')
+    # axes[1].axis('off')    
     plt.tight_layout()
     plt.show()
 

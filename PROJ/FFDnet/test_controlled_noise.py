@@ -8,8 +8,41 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from includes import *
 import torch.nn.functional as F_torch
 from FFDnet import FFDNet, FFDNetConfig
-from test_ffdnet import denoise_image
 import dataset
+
+
+def denoise_array(model, noisy_array, sigma, device='cuda'):
+    """
+    Denoise a numpy array [H, W] with values in [0, 1] using full image inference.
+    """
+    if isinstance(device, str):
+        device = torch.device(device)
+        
+    # Convert to torch tensor - ensure float32
+    noisy_tensor = torch.from_numpy(noisy_array.astype(np.float32)).unsqueeze(0).unsqueeze(0).to(device)
+    
+    # FFDNet requires dimensions divisible by 2
+    _, _, H, W = noisy_tensor.shape
+    h_pad = (2 - H % 2) % 2
+    w_pad = (2 - W % 2) % 2
+    
+    if h_pad > 0 or w_pad > 0:
+        noisy_tensor = F_torch.pad(noisy_tensor, (0, w_pad, 0, h_pad), mode='reflect')
+
+    # Create sigma map
+    sigma_map = torch.full_like(noisy_tensor, sigma/255.0)
+
+    # Run inference
+    model.eval()
+    with torch.no_grad():
+        predicted_noise = model(noisy_tensor, sigma_map)
+        denoised_tensor = noisy_tensor - predicted_noise
+
+    # Crop back
+    if h_pad > 0 or w_pad > 0:
+        denoised_tensor = denoised_tensor[:, :, :H, :W]
+
+    return denoised_tensor.squeeze().cpu().numpy()
 
 
 def add_gaussian_noise(image, sigma):
@@ -49,15 +82,8 @@ def test_with_controlled_noise(model, clean_path, sigma_noise=25, sigma_denoise=
     np.random.seed(42)  # For reproducibility
     noisy_array = add_gaussian_noise(clean_array, sigma_noise)
     
-    # Save noisy image temporarily
-    temp_noisy_path = 'temp_noisy.png'
-    Image.fromarray((noisy_array * 255).astype(np.uint8), mode='L').save(temp_noisy_path)
-    
-    # Denoise
-    denoised_array = denoise_image(model, temp_noisy_path, sigma_denoise, device)
-    
-    # Clean up
-    os.remove(temp_noisy_path)
+    # Denoise directly (no temp file, no uint8 conversion)
+    denoised_array = denoise_array(model, noisy_array, sigma_denoise, device)
     
     # Calculate PSNR
     psnr_noisy = calculate_psnr(clean_array, noisy_array)
@@ -165,7 +191,9 @@ if __name__ == "__main__":
         num_conv_layers=config.num_conv_layers
     ).to(device)
     
-    model_path = 'ffdnet_model.pth'
+    # Look for model in the same directory as this script
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffdnet_model.pth')
+    
     if os.path.exists(model_path):
         checkpoint = torch.load(model_path, map_location=device, weights_only=False)
         # Handle both checkpoint dict and direct state_dict
@@ -183,9 +211,18 @@ if __name__ == "__main__":
     
     # Test on clean images with controlled noise
     clean_dir = dataset.GRAY_TEST_DIR
+    if not os.path.exists(clean_dir):
+        print(f"Test directory {clean_dir} not found!")
+        sys.exit(1)
+        
     clean_images = sorted([f for f in os.listdir(clean_dir) 
-                          if f.lower().endswith(('.png', '.jpg', '.jpeg'))])[:2]
+                          if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
     
-    for img_name in clean_images:
-        clean_path = os.path.join(clean_dir, img_name)
-        comprehensive_test(model, clean_path, device)
+    if not clean_images:
+        print("No images found in test directory!")
+        sys.exit(1)
+        
+    # Test on just one image for quick verification
+    img_name = clean_images[0]
+    clean_path = os.path.join(clean_dir, img_name)
+    comprehensive_test(model, clean_path, device)

@@ -8,28 +8,6 @@ import numpy as np
 import os
 from dnCNN import DnCNN
 
-
-# class DnCNN(nn.Module):
-#     """Minimal DnCNN to match training architecture (grayscale)
-#     This matches the model defined in `dnCNN.py` used for training.
-#     """
-#     def __init__(self, in_channels=1, depth=17, num_filters=64):
-#         super(DnCNN, self).__init__()
-#         layers = []
-#         layers.append(nn.Conv2d(in_channels=in_channels, out_channels=num_filters, kernel_size=3, padding=1, bias=False))
-#         layers.append(nn.ReLU(inplace=True))
-#         for _ in range(depth - 2):
-#             layers.append(nn.Conv2d(in_channels=num_filters, out_channels=num_filters, kernel_size=3, padding=1, bias=False))
-#             layers.append(nn.BatchNorm2d(num_filters))
-#             layers.append(nn.ReLU(inplace=True))
-#         layers.append(nn.Conv2d(in_channels=num_filters, out_channels=in_channels, kernel_size=3, padding=1, bias=False))
-#         self.dncnn = nn.Sequential(*layers)
-
-#     def forward(self, x):
-#         # returns predicted noise
-#         return self.dncnn(x)
-
-
 def load_image_gray(path, resize=None):
     img = Image.open(path).convert('L')
     if resize is not None:
