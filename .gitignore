@@ -1,3 +1,10 @@
 PROJ/datasets/*
 .venv/
 LAB/venv/*
+PROJ/__pycache__/
+PROJ/Noise2Void/__pycache__/
+PROJ/FFDnet/__pycache__/
+
+# TEMPORARY DELETE ALL TEH MODELS
+# TODO add some pretrained models later
+*.pth
