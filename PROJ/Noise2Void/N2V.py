@@ -195,7 +195,9 @@ def n2v_train(model, criterion, optimizer, data_loader, device):
         X, y, mask = dl[0].to(device), dl[1].to(device), dl[2].to(device)
         optimizer.zero_grad()
         output = model(X)
-        loss_value = criterion(output * (1 - mask), y * (1 - mask))
+        
+        blind_spot_mask = (1 - mask)
+        loss_value = criterion(output * blind_spot_mask, y * blind_spot_mask)
         loss_value.backward()
         optimizer.step()
 
@@ -219,7 +221,9 @@ def n2v_evaluate(model, criterion, data_loader, device):
 
         with torch.no_grad():
             output = model(X)
-            loss_value = criterion(output * (1 - mask), y * (1 - mask))
+            
+            blind_spot_mask = (1 - mask)
+            loss_value = criterion(output * blind_spot_mask, y * blind_spot_mask)
 
             ypred = (output.detach().cpu().numpy()).astype(float)
 
@@ -231,35 +235,6 @@ def n2v_evaluate(model, criterion, data_loader, device):
     return loss, accuracy
 
 if __name__ == "__main__":
-    # test_img_path = os.path.join(GRAY_DATASET_DIR, 'test', '410936964_75a544fe67_c.jpg')
-    # test_img = cv2.imread(test_img_path, cv2.IMREAD_GRAYSCALE)
-    # test_img = normalize_img(test_img)
-    # test_img_t = torch.tensor(test_img, dtype=torch.float32).unsqueeze(0)
-    # test_img_patches = image_to_patches(test_img_t, patch_size=64, stride=48)
-
-    # noisy_test_img = add_gaussian_noise_to_image(test_img, sigma=25)
-    # noisy_test_img_t = torch.tensor(noisy_test_img, dtype=torch.float32).unsqueeze(0)
-    # noisy_test_img_patches = image_to_patches(noisy_test_img_t, patch_size=64, stride=48)
-
-    # perc_active = 50
-    # total_num_pixels = noisy_test_img_patches[0].shape[1] * noisy_test_img_patches[0].shape[2]
-    # n_activepixels = int(np.floor((total_num_pixels * perc_active) / 100))
-
-    # crtp_patch, mask = multi_active_pixels(noisy_test_img_patches[0], n_pix=n_activepixels, n_rad=5)
-
-    # fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-    # axs[0].imshow(noisy_test_img_patches[0].squeeze().numpy(), cmap='gray')
-    # axs[0].set_title('Original Patch')
-    # axs[0].axis('off')
-    # axs[1].imshow(crtp_patch.squeeze().numpy(), cmap='gray')
-    # axs[1].set_title('Masked Patch')
-    # axs[1].axis('off')
-    # axs[2].imshow(mask.squeeze().numpy(), cmap='gray')
-    # axs[2].set_title('Mask')
-    # axs[2].axis('off')
-    # plt.tight_layout()
-    # plt.show()
-
     test_img_arr, train_img_arr, val_img_arr, noisy_test_img_arr, noisy_train_img_arr, noisy_val_img_arr = load_and_process_dataset(GRAY_DATASET_DIR)
 
     test_dataset = N2VDataset(noisy_test_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5)

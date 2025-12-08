@@ -34,6 +34,27 @@ def denoise_image(model, noisy_img, device):
     
     return denoised
 
+def calculate_mean_psnr(model, device, numImg, test_dir, test_files, sigma=25):
+    psnr_noisy_total = 0.0
+    psnr_denoised_total = 0.0
+    for i in range(numImg):
+        image = test_files[i]
+        test_img_path = os.path.join(test_dir, image)
+        img = cv2.imread(test_img_path, cv2.IMREAD_GRAYSCALE)
+        img = normalize_img(img)
+        noisy_img = add_gaussian_noise(img, sigma=sigma)
+        denoised_img = denoise_image(model, noisy_img, device)
+
+        mse_noisy = np.mean((img - noisy_img) ** 2)
+        psnr_noisy_total += 10 * np.log10(1.0 / mse_noisy) if mse_noisy > 0 else float('inf')
+        
+        mse_denoised = np.mean((img - denoised_img) ** 2)
+        psnr_denoised_total += 10 * np.log10(1.0 / mse_denoised) if mse_denoised > 0 else float('inf')
+
+    mean_psnr_noisy = psnr_noisy_total / numImg
+    mean_psnr_denoised = psnr_denoised_total / numImg
+    return mean_psnr_noisy, mean_psnr_denoised
+
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -53,6 +74,10 @@ if __name__ == "__main__":
     test_dir = os.path.join(GRAY_DATASET_DIR, 'test')
     test_files = [f for f in os.listdir(test_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     
+    mean_psnr_noisy, mean_psnr_denoised = calculate_mean_psnr(model, device, len(test_files), test_dir, test_files, sigma=25)
+    print(f"Mean PSNR of Noisy Images: {mean_psnr_noisy:.2f} dB")
+    print(f"Mean PSNR of Denoised Images: {mean_psnr_denoised:.2f} dB")
+
     if not test_files:
         print("No test images found!")
         exit(1)
