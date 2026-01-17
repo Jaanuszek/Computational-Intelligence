@@ -1,0 +1,15 @@
+name: CI_python
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - kagglehub
+  - numpy
+  - matplotlib
+  - transformers
+  - torchvision
+  - pytorch-cuda=12.4
+  - torchaudio
+  - pytorch
+  - ipykernel
+  - tensorflow
