@@ -18,12 +18,12 @@ First of all, run `main.py` to download datasets, and process images. Then all t
 List of scripts:
 - `DNCNN/dnCNN.py` - Implementation of DnCNN model with training and testing scripts.
 - `FFDnet/ffdnet.py` - Implementation of FFDNet model with training and testing scripts.
+- `FFDNet/test_ffdnet.py` - Script to test FFDNet model on one noisy image.
+- `FFDnet/test_controlled_noise.py` - Script to test FFDNet with different noise leves on both dataset and noise map.
 - `Noise2Void/noise2void.py` - Implementation of Noise2Void model with training and testing scripts.
+- `Noise2Void/test_n2v.py` - Script to test Noise2Void model on one noisy image.
 - `compare_all_models.py` - Script to compare all three models on the same test dataset and generate results.
 - `generate_presentation_results.py` - Script to generate results that compares DnCNN with FFDNet
-- `FFDnet/test_controlled_noise.py` - Script to test FFDNet with different noise leves on both dataset and noise map.
-- `FFDNet/test_ffdnet.py` - Script to test FFDNet model on one noisy image.
-- `Noise2Void/test_n2v.py` - Script to test Noise2Void model on one noisy image.
 - `ensamble_models.py` - Script to combine outputs of all three models using different strategies (mean, weighted mean, median).
 
 ## Pre-trained models

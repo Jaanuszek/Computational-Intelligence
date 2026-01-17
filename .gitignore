@@ -6,3 +6,4 @@ Noise2Void/__pycache__
 FFDnet/__pycache__
 /*.png
 Noise2Void/*.pth
+Noise2Void/checkpoints/
