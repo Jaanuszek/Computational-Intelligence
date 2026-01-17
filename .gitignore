@@ -1,7 +1,8 @@
 datasets/
 .venv/
-__pycache__/
-DnCNN/__pycache__/
-Noise2Void/__pycache__/
-FFDnet/__pycache__/
+__pycache__
+DnCNN/__pycache__
+Noise2Void/__pycache__
+FFDnet/__pycache__
 /*.png
+Noise2Void/*.pth
