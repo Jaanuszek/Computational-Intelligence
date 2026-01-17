@@ -191,8 +191,7 @@ if __name__ == "__main__":
         num_conv_layers=config.num_conv_layers
     ).to(device)
     
-    # Look for model in the same directory as this script
-    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffdnet_model.pth')
+    model_path = os.path.join(MODEL_DIR, 'ffdnet_model.pth')
     
     if os.path.exists(model_path):
         checkpoint = torch.load(model_path, map_location=device, weights_only=False)

@@ -2,10 +2,6 @@ import torch
 import torch.nn as nn
 
 class SimpleUNet(nn.Module):
-    """
-    Simplified U-Net that preserves input dimensions
-    Uses padding='same' to maintain spatial dimensions throughout
-    """
     def __init__(self, in_channels=1, out_channels=1, base_channels=64):
         super(SimpleUNet, self).__init__()
         

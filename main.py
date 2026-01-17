@@ -1,6 +1,4 @@
 import dataset
-import NoisyImageDataset
-# from dnCNN import dnCNN_conf
 
 from includes import *
 

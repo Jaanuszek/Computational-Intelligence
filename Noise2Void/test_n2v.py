@@ -4,9 +4,15 @@ import cv2
 import matplotlib.pyplot as plt
 import os
 from simple_unet import SimpleUNet
+import sys
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(CURR_DIR, '..'))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+from includes import *
+
 GRAY_DATASET_DIR = os.path.join(ROOT_DIR, 'datasets', 'Gray')
 
 def normalize_img(img):
@@ -61,7 +67,7 @@ if __name__ == "__main__":
     
     # Load model
     model = SimpleUNet(in_channels=1, out_channels=1, base_channels=64).to(device)
-    model_path = os.path.join(CURR_DIR, 'n2v_unet_model.pth')
+    model_path = os.path.join(MODEL_DIR,'n2v_unet_model.pth')
     
     if not os.path.exists(model_path):
         print(f"Model not found at {model_path}")
@@ -82,7 +88,8 @@ if __name__ == "__main__":
         print("No test images found!")
         exit(1)
     
-    TEST_FILE = test_files[20]
+    rand_num = np.random.randint(0, len(test_files))
+    TEST_FILE = test_files[rand_num]
 
     test_img_path = os.path.join(test_dir, TEST_FILE)
     print(f"Testing on: {TEST_FILE}")

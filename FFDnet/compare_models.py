@@ -10,7 +10,7 @@ import torch.nn.functional as F_torch
 from FFDnet import FFDNet, FFDNetConfig
 from test_ffdnet import denoise_image as ffdnet_denoise
 
-# Import DnCNN from parent directory
+CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 
@@ -239,7 +239,7 @@ def main():
         num_conv_layers=config.num_conv_layers
     ).to(device)
     
-    ffdnet_path = 'ffdnet_model.pth'
+    ffdnet_path = os.path.join(MODEL_DIR, 'ffdnet_model.pth')
     if os.path.exists(ffdnet_path):
         ffdnet_model.load_state_dict(torch.load(ffdnet_path, map_location=device))
         print(f"✓ Loaded FFDNet from {ffdnet_path}")
@@ -251,7 +251,7 @@ def main():
     print("Loading DnCNN...")
     dncnn_model = DnCNN(in_channels=1, depth=17, num_filters=64).to(device)
     
-    dncnn_path = '../dnCNN_model.pth'
+    dncnn_path = os.path.join(MODEL_DIR, 'dncnn_model.pth')
     if os.path.exists(dncnn_path):
         dncnn_model.load_state_dict(torch.load(dncnn_path, map_location=device))
         print(f"✓ Loaded DnCNN from {dncnn_path}")

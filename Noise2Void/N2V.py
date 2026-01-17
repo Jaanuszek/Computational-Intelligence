@@ -99,23 +99,73 @@ def image_to_patches(img, patch_size, stride):
     patches = patches.contiguous().view(-1, c, patch_size, patch_size)
     return patches
 
-def multi_active_pixels(patch, n_pix, n_rad=5):
+def multi_active_pixels(patch, n_pix, n_rad=5, use_gradient=False, gradient_bias=0.7):
     """
     Adding masks to the patch for N2V training
     
     :param patch: Torch tensor of shape (H, W) or (1, H, W)
     :param n_pix: Number of pixels to mask
     :param n_rad: Radius around each pixel to avoid overlapping masks
+    :param use_gradient: If True, use gradient-based masking
+    :param gradient_bias: Fraction of pixels to sample from high-gradient regions (0-1)
     """
     # Ensure patch has 3 dimensions (1, H, W)
     if patch.ndim == 2:
         patch = patch.unsqueeze(0)
     
-    # chose random pixels positions 
-    idx_aps = np.random.randint(0, patch.shape[1], n_pix)
-    idy_aps = np.random.randint(0, patch.shape[2], n_pix)
+    h, w = patch.shape[1], patch.shape[2]
+    
+    if use_gradient:
+        # GRADIENT-BASED MASKING
+        # Convert to numpy for gradient calculation
+        patch_np = patch[0].cpu().numpy()
+        
+        # Calculate gradient magnitude using Sobel
+        grad_x = cv2.Sobel(patch_np, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(patch_np, cv2.CV_32F, 0, 1, ksize=3)
+        grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        
+        # Flatten gradient map
+        grad_flat = grad_magnitude.flatten()
+        
+        # Normalize to create probability distribution
+        epsilon = 1e-8
+        grad_prob = (grad_flat + epsilon) / (grad_flat.sum() + epsilon)
+        
+        # Number of pixels to sample from high-gradient vs random
+        n_gradient = int(n_pix * gradient_bias)
+        n_random = n_pix - n_gradient
+        
+        # Sample pixels based on gradient probability
+        sampled_indices = []
+        
+        if n_gradient > 0:
+            gradient_samples = np.random.choice(
+                len(grad_flat),
+                size=n_gradient,
+                replace=False,
+                p=grad_prob
+            )
+            sampled_indices.extend(gradient_samples)
+        
+        if n_random > 0:
+            all_indices = set(range(len(grad_flat)))
+            available = list(all_indices - set(sampled_indices))
+            if len(available) > 0:
+                random_samples = np.random.choice(available, size=min(n_random, len(available)), replace=False)
+                sampled_indices.extend(random_samples)
+        
+        # Convert flat indices to 2D coordinates
+        sampled_indices = np.array(sampled_indices)
+        idx_aps = sampled_indices // w
+        idy_aps = sampled_indices % w
+    else:
+        # RANDOM MASKING (original)
+        idx_aps = np.random.randint(0, h, n_pix)
+        idy_aps = np.random.randint(0, w, n_pix)
+    
     # Active pixels indices tuple
-    id_aps = (0, idx_aps, idy_aps) # wrap into a tuple
+    id_aps = (0, idx_aps, idy_aps)
 
     # random shifts in radius n_rad
     x_shift = np.random.randint(-n_rad // 2 + n_rad % 2, n_rad // 2 + n_rad % 2, n_pix)
@@ -125,18 +175,19 @@ def multi_active_pixels(patch, n_pix, n_rad=5):
     for i in range(len(x_shift)):
         if x_shift[i] == 0 and y_shift[i] == 0:
             shift = np.trim_zeros(np.arange(-n_pix//2 +1, n_pix//2 +1))
-            x_shift[i] = int(np.random.choice(shift[shift != 0], 1)[0])
+            if len(shift[shift != 0]) > 0:
+                x_shift[i] = int(np.random.choice(shift[shift != 0], 1)[0])
 
     # neighbor pixels indices to replace current active pixels
     n_idx = idx_aps + x_shift 
     n_idy = idy_aps + y_shift
     # wrap around
-    n_idx = n_idx % patch.shape[1]
-    n_idy = n_idy % patch.shape[2]
+    n_idx = n_idx % h
+    n_idy = n_idy % w
     # tuple of final x,y indices of neighbour pixels
     n_id = (0, n_idx, n_idy) 
 
-    cp_patch = patch.clone() # copy()?
+    cp_patch = patch.clone()
     cp_patch[id_aps] = patch[n_id]
 
     mask = torch.ones_like(patch)
@@ -149,12 +200,14 @@ class N2VDataset(Dataset):
     Docstring for N2VDataset
     images: List of images
     """
-    def __init__(self, images, patch_size=64, stride=48, perc_active=2, n_rad=5):
+    def __init__(self, images, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=False, gradient_bias=0.7):
         self.images = images
         self.patch_size = patch_size
         self.stride = stride
         self.perc_active = perc_active
         self.n_rad = n_rad
+        self.use_gradient = use_gradient
+        self.gradient_bias = gradient_bias
         self.patches = []
 
         for img in images:
@@ -167,6 +220,9 @@ class N2VDataset(Dataset):
         # Calculate number of active pixels
         total_num_pixels = patch_size * patch_size
         self.n_activepixels = int(np.floor((total_num_pixels * perc_active) / 100))
+        
+        masking_mode = "GRADIENT-BASED" if use_gradient else "RANDOM"
+        print(f"N2VDataset: {len(self.patches)} patches, masking={masking_mode}")
 
     def __len__(self):
         return len(self.patches)
@@ -174,7 +230,13 @@ class N2VDataset(Dataset):
     def __getitem__(self, idx):
         original_patch = self.patches[idx].squeeze(0)  # Remove channel dim: (H, W)
         # Generate corrupted patch and mask on-the-fly
-        corrupted_patch, mask = multi_active_pixels(original_patch, n_pix=self.n_activepixels, n_rad=self.n_rad)
+        corrupted_patch, mask = multi_active_pixels(
+            original_patch, 
+            n_pix=self.n_activepixels, 
+            n_rad=self.n_rad,
+            use_gradient=self.use_gradient,
+            gradient_bias=self.gradient_bias
+        )
         # Squeeze to (H, W) if needed
         corrupted_patch = corrupted_patch.squeeze(0) if corrupted_patch.ndim == 3 else corrupted_patch
         mask = mask.squeeze(0) if mask.ndim == 3 else mask
@@ -237,9 +299,9 @@ def n2v_evaluate(model, criterion, data_loader, device):
 if __name__ == "__main__":
     test_img_arr, train_img_arr, val_img_arr, noisy_test_img_arr, noisy_train_img_arr, noisy_val_img_arr = load_and_process_dataset(GRAY_DATASET_DIR)
 
-    test_dataset = N2VDataset(noisy_test_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5)
-    train_dataset = N2VDataset(noisy_train_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5)
-    val_dataset = N2VDataset(noisy_val_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5)
+    test_dataset = N2VDataset(noisy_test_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=True, gradient_bias=0.7)
+    train_dataset = N2VDataset(noisy_train_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=True, gradient_bias=0.7)
+    val_dataset = N2VDataset(noisy_val_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=True, gradient_bias=0.7)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -283,7 +345,7 @@ if __name__ == "__main__":
         
         # Save checkpoint every 5 epochs
         if (epoch + 1) % 5 == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f'n2v_epoch_{epoch+1}.pth')
+            checkpoint_path = os.path.join(checkpoint_dir, f'n2v_epoch_{epoch+1}_gradient.pth')
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': network.state_dict(),
@@ -296,27 +358,39 @@ if __name__ == "__main__":
         # Save best model
         if test_loss < best_loss:
             best_loss = test_loss
-            best_model_path = os.path.join(CURR_DIR, 'best_n2v_model.pth')
+            best_model_path = os.path.join(CURR_DIR, 'best_n2v_model_gradient.pth')
             torch.save(network.state_dict(), best_model_path)
             print(f'Best model saved with test loss: {best_loss:.4f}')
 
     # save final model
-    model_path = os.path.join(CURR_DIR, 'n2v_unet_model.pth')
+    model_path = os.path.join(CURR_DIR, 'n2v_unet_model_gradient.pth')
     torch.save(network.state_dict(), model_path)
     print(f'Final model saved: {model_path}')
 
-    fig, axs = plt.subplots(1, 4, figsize=(12, 4))
-    axs[0].imshow(train_loss_history, cmap='gray')
-    axs[0].set_title('Training Loss')
-    axs[0].axis('off')
-    axs[1].imshow(train_accuracy_history, cmap='gray')
-    axs[1].set_title('Train Accuracy')
-    axs[1].axis('off')
-    axs[2].imshow(test_loss_history, cmap='gray')
-    axs[2].set_title('Test Loss')
-    axs[2].axis('off')
-    axs[3].imshow(test_accuracy_history, cmap='gray')
-    axs[3].set_title('Test Accuracy')
-    axs[3].axis('off')
+    fig, axs = plt.subplots(2, 2, figsize=(12, 8))
+    axs[0, 0].plot(train_loss_history)
+    axs[0, 0].set_title('Training Loss')
+    axs[0, 0].set_xlabel('Epoch')
+    axs[0, 0].set_ylabel('Loss')
+    axs[0, 0].grid(True)
+    
+    axs[0, 1].plot(train_accuracy_history)
+    axs[0, 1].set_title('Train Accuracy (RMSE)')
+    axs[0, 1].set_xlabel('Epoch')
+    axs[0, 1].set_ylabel('RMSE')
+    axs[0, 1].grid(True)
+    
+    axs[1, 0].plot(test_loss_history)
+    axs[1, 0].set_title('Test Loss')
+    axs[1, 0].set_xlabel('Epoch')
+    axs[1, 0].set_ylabel('Loss')
+    axs[1, 0].grid(True)
+    
+    axs[1, 1].plot(test_accuracy_history)
+    axs[1, 1].set_title('Test Accuracy (RMSE)')
+    axs[1, 1].set_xlabel('Epoch')
+    axs[1, 1].set_ylabel('RMSE')
+    axs[1, 1].grid(True)
+    
     plt.tight_layout()
     plt.show()

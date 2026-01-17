@@ -93,7 +93,7 @@ def load_models(device):
     models = {}
     
     # DnCNN
-    dncnn_path = os.path.join(CURR_DIR, 'best_dncnn_checkpoint.pth')
+    dncnn_path = os.path.join(CURR_DIR, 'models', 'best_dncnn_checkpoint.pth')
     if os.path.exists(dncnn_path):
         dncnn = DnCNN(depth=17, num_filters=64, in_channels=1).to(device)
         checkpoint = torch.load(dncnn_path, map_location=device, weights_only=False)
@@ -135,7 +135,7 @@ def load_models(device):
         print(f"✗ FFDNet not found")
     
     # Noise2Void
-    n2v_path = os.path.join(CURR_DIR, 'Noise2Void', 'best_n2v_model.pth')
+    n2v_path = os.path.join(CURR_DIR, 'models', 'best_n2v_model.pth')
     if os.path.exists(n2v_path):
         n2v = SimpleUNet(in_channels=1, out_channels=1, base_channels=64).to(device)
         checkpoint = torch.load(n2v_path, map_location=device, weights_only=False)

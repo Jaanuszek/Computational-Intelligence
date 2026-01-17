@@ -25,3 +25,6 @@ import kagglehub
 
 import cv2
 from cv2 import cuda
+
+
+MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
