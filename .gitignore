@@ -1,10 +1,9 @@
-PROJ/datasets/*
+datasets/
 .venv/
-LAB/venv/*
-PROJ/__pycache__/
-PROJ/Noise2Void/__pycache__/
-PROJ/FFDnet/__pycache__/
-
-# TEMPORARY DELETE ALL TEH MODELS
-# TODO add some pretrained models later
-*.pth
+__pycache__
+DnCNN/__pycache__
+Noise2Void/__pycache__
+FFDnet/__pycache__
+/*.png
+Noise2Void/*.pth
+Noise2Void/checkpoints/
