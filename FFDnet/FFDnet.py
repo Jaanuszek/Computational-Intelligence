@@ -1,3 +1,8 @@
+"""
+FFDNet.py - Consist of FFDNet model definition and training utilities.
+"""
+
+
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))

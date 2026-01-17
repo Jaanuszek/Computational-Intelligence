@@ -1,3 +1,11 @@
+"""
+compare_all_models.py - Compare DnCNN, FFDNet, and Noise2Void on grayscale images.
+This script benchmarks the three models on a test dataset, measuring PSNR and SSIM improvements,
+inference time, and model size. It generates summary statistics and visualizations for comparison.
+It also benchmarks models with controlled noise levels.
+"""
+
+
 import torch
 import numpy as np
 import cv2
@@ -167,6 +175,20 @@ def benchmark_models(models, test_images, sigma=25, device='cuda'):
         'ssim_denoised': []
     } for name in models.keys()}
     
+    # CUDA warm-up: run each model once to initialize kernels and memory
+    if device.type == 'cuda' and len(test_images) > 0:
+        print("\nWarming up CUDA...")
+        warmup_img = add_gaussian_noise(test_images[0], sigma=sigma)
+        for model_name, model_data in models.items():
+            model = model_data['model']
+            denoise_fn = model_data['denoise_fn']
+            if model_name == 'FFDNet':
+                _ = denoise_fn(model, warmup_img, device, sigma=sigma)
+            else:
+                _ = denoise_fn(model, warmup_img, device)
+        torch.cuda.synchronize()  # Ensure all operations complete
+        print("Warm-up complete.\n")
+    
     print(f"\n{'='*60}")
     print(f"Testing on {len(test_images)} images with sigma={sigma}")
     print(f"{'='*60}\n")
@@ -185,13 +207,19 @@ def benchmark_models(models, test_images, sigma=25, device='cuda'):
             model = model_data['model']
             denoise_fn = model_data['denoise_fn']
             
-            # Measure inference time
+            # Measure inference time with proper GPU synchronization
+            if device.type == 'cuda':
+                torch.cuda.synchronize()  # Ensure previous ops are done
+            
             start_time = time.time()
             
             if model_name == 'FFDNet':
                 denoised_img = denoise_fn(model, noisy_img, device, sigma=sigma)
             else:
                 denoised_img = denoise_fn(model, noisy_img, device)
+            
+            if device.type == 'cuda':
+                torch.cuda.synchronize()  # Wait for GPU to finish
             
             inference_time = time.time() - start_time
             
@@ -287,8 +315,12 @@ def plot_comparison(models, results):
     ax.set_ylabel('Inference Time (ms)', fontweight='bold')
     ax.set_title('Average Inference Speed')
     ax.grid(axis='y', alpha=0.3)
+    # Set y-axis to start from 0 to avoid negative values
+    ax.set_ylim(bottom=0)
     for i, (bar, val) in enumerate(zip(bars, times)):
-        ax.text(bar.get_x() + bar.get_width()/2, val + time_stds[i] + 0.5, f'{val:.1f}', 
+        # Position text above error bar with proper offset (max of 5% of bar height or 2ms)
+        text_offset = max(val * 0.05, 2.0)
+        ax.text(bar.get_x() + bar.get_width()/2, val + time_stds[i] + text_offset, f'{val:.1f}', 
                 ha='center', va='bottom', fontweight='bold')
     
     # 4. Model Size

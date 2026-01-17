@@ -1,3 +1,7 @@
+"""
+    simple_unet.py - Defines a simple U-Net architecture for image denoising.
+"""
+
 import torch
 import torch.nn as nn
 

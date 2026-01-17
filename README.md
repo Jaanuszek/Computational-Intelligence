@@ -1,112 +1,86 @@
-# Project Ideas
+# AI image denoiser
 
-## Image denoiser
+This repository contains implementations of:
+- DnCNN (Denoising Convolutional Neural Network)
+- FFDNet (Fast and Flexible Denoising Convolutional Neural Network)
+- Noise2Void (Self-supervised denoising using U-Net architecture)
 
-### Why I chosed this topic? (Problem statement & motivation) TODO WHY THIS MATTERS??
+Moreover, here are some scripts for training, testing, and generating results for these models.
 
-My master's thesis is about creating a graphics engine using Ray Tracing and Radiosity algorithms. Path tracing is a ray tracing technique thas uses Monte Carlo method for calculating (approximating) the result (pixel color). Monte Carlo is stochastic algorithm and because of that, it creates a noisy results and therefore noisy images. The more iteration, the more accurate the result is, so in order to render a clear image we need to cast more rays, which is computationally expensive. Denoising resulted image with AI might be a more optimal approach, which can save some valuable resources.
+It was created based on the review of scientific works about image denoising using deep learning methods. You can find the review [here](review_of_scientific_works.md).
 
-### Key terms, models, methods, and algorithms (small examples/diagrams)
+This project is part of the Computational Intelligence course at AGH University of Science and Technology.
 
-* **MOEDELS** </br>
-    - CNN
-    - Autoencoders - When you have both original and noisy image
-    - Unet (?)
-    - Noise2Noise - Network can be trained using pairs of noisy images
-    - Noise2Void - Only requires noisy images. Signal has a structure, noise does not. We can't predict noise by looking at surroiunding pixels, but we can predict structures.
+## How to run it
 
-### Baseline plan (data, model(s), metrics)
+First of all, run `main.py` to download datasets, and process images. Then all the other scripts should work as is.
 
-I want to use different methods to check what approach gives the best result (visual effect, accuracy loss, resolution loss, visable artifacts). I'll try to teach model using semi-supervised and unsupervised(?) learning approaches. Will use [Animal Faces](https://www.kaggle.com/datasets/andrewmvd/animal-faces) dataset, noisy images will be crated adding some artificial noise.
+List of scripts:
+- `DNCNN/dnCNN.py` - Implementation of DnCNN model with training and testing scripts.
+- `FFDnet/ffdnet.py` - Implementation of FFDNet model with training and testing scripts.
+- `Noise2Void/noise2void.py` - Implementation of Noise2Void model with training and testing scripts.
+- `compare_all_models.py` - Script to compare all three models on the same test dataset and generate results.
+- `generate_presentation_results.py` - Script to generate results that compares DnCNN with FFDNet
+- `FFDnet/test_controlled_noise.py` - Script to test FFDNet with different noise leves on both dataset and noise map.
+- `FFDNet/test_ffdnet.py` - Script to test FFDNet model on one noisy image.
+- `Noise2Void/test_n2v.py` - Script to test Noise2Void model on one noisy image.
+- `ensamble_models.py` - Script to combine outputs of all three models using different strategies (mean, weighted mean, median).
 
-* Metrics:
-    - PSNR (Peak Signal to Noise Ratio)
-    - MSE (Mean Squared Error)
-    - SSIM (Structural Similarity Index) - Metric that quantifies image quality degradation caused by processing the data compression. It measures the difference between two images reference image - test image.
+## Pre-trained models
 
+You can find pre-trained models in the `models/` directory. These models were trained on grayscale images with Gaussian noise (σ = 25).
 
-### Constraints & resources, risks, and a rough timeline
+## Results
 
-From the risk perspective, I am worried the most about time needed for teaching a model, so it might be important to convert images to grey scale in order to make learning faster and easier to test.
+### Visual comparison of denoising results between DnCNN, FFDNet, and Noise2Void
 
-### References
+![Results](assets/readme_assets/visual_comparison.png)
 
-* https://www.kaggle.com/code/ahmedelsayedtaha/denoising-images-using-autoencoder
-* https://www.kaggle.com/code/davidesavarro/image-denoiser
-* https://raver119.medium.com/denoising-images-with-deep-learning-9124d36fda0a
-* https://github.com/Cydral/AI-Image-Denoiser
-* https://blogs.nvidia.com/blog/what-is-denoising/
-* https://github.com/SecretMG/UNet-for-Image-Denoising
-* https://www.kaggle.com/code/andreipaulavets/byu-denoising-cryo-et-with-noise2void
+### Expectations vs Reality
 
-### Links to candidate datasets
+Judging by the research papres:
+- DnCNN is the simplest model, that gives the worst restults among the three.
+- FFDNet is faster, better, more flexible than DnCNN, and gives better results.
+- Noise2Void is a self-supervised method, that does not require clean images for training, and gives comparable results to supervised methods.
 
-* https://www.kaggle.com/datasets/moltean/fruits/data
-* https://www.kaggle.com/datasets/bhavikjikadara/dog-and-cat-classification-dataset
-* https://www.kaggle.com/datasets/muhammadrehan00/chest-xray-dataset
+However, in practice the results were very much the same, with one little suprise - Noise2Void outperformed both DnCNN and FFDNet in terms of PSNR and visual quality, despite being a self-supervised method (probably due to usage of U-Net architecture).
 
-## Optimizing model using QAT
+![model_comparison](assets/readme_assets/model_comparison.png)
 
-### Why I chosed this topic? (Problem statement & motivation)
+As you can see here, Noise2Void achieved the highest PSNR and SSIM gain, followed by FFDNet and DnCNN. The DnCNN was the slowest model, while FFDNet was the fastest. Noise2Void was in between in terms of speed. Noise2Void's model size was the largest. 
 
-In the era of miniaturization, where small devices are faster than very expensive computers from a few years ago, there is a big demand packing the most functionalities in those small devices. Unfortunately, the most of good AI models, that use FP32 or BF32 precision take up a lot of space and require high computing power, which translates into higher energy/battery consumption. In mobile phones or battery-powered embedded devices, every second of battery life couts, which is why optimizing AI models through quantization is crucial. At this point, many AI functiosn on phones rely on sending queries to the cloud, so in order to use these functions, the device must have access to the internet. But what if we could optimize the model to such an etent that it would take up muc less space and be very similar in performance to the original non-quantized model? We could then afford to store and use this model directly in the device's memory, alowing AI fetures to be used without internet access and with lower battery consumption.
+Speaking of flexibility, FFDNet allows to adjust the noise level during inference, and was trained with dynamic noise levels, which makes it more versatile.
 
-Why optimize model?
+![noise_robustness](assets/readme_assets/noise_robustness.png)
 
-* Size reuction:
-    - Smaller storage size
-    - Smaller download size
-    - Less memory usage - Models use less RAM when they are running, which frees up memory for other parts of yout application to use.
-* Latency reduction
-    - Quantization can be used to reduce latency by simplifying the calculations that occur during inference, potentially at the expense of some accuracy
-* Accelerator compatibility
-    - Some edge devices, e.g. edge TPU (Tensor Processing Unit) - might inference faster with models that have been correctly optimized - quantized in a specific way.
+FFDnet outperformed both DnCNN and Noise2Void when tested on different noise levels, which confirms its robustness to varying noise conditions.
 
-### Key terms, models, methods, and algorithms (small examples/diagrams)
+### Watermark removal using FFDNet
 
-* Quantization
-    - QAT (Quantization-Aware Training) - Simulates low-precision inference-time computation in the forward pass of the training process. That means, we are changing the weights precission to INT8, but we still use FP32, which introduce quantization error as noise during the training, which optimizator in backward pass is trying to reduce using FP32 precission.
-    - PTQ (Post-Training Quantization) - Is just quantizing already trained (float precission) model
-        * Static Quantization - Requires a calibration step, uses fixed quantization parameters, offers faster inference with purely integer arithmetic, and is ideal for scenarios with known and stable input data distributions.
-        * Dynamic range Quantization - Is the simplest form of PTQ that only quantizes the weights from floating point to integer. FP32 (4B) -> INT8 (1B) it is 4x smaller and therefore has speedup in CPU operations.
-            - Weights are stored and computed in int8, but activations remain in floatin point until they are used in computations
-            - Does not need a calibration step
-* Weight Pruning - trims parameters within a model that has very less impact on the performance of the model. We can just cut the unnecessary weights that does not matter (sparse network - rzadsza sieć). It reduces the model sizes without a big accuracy loss.
-* Fine-tuning - A process in which we take an already trained model (known as a base model or pretrained model) and train it further on a new, often smaller dataset, adapting it to a specific task.
+By accident, I discovered that, when we noise the image with a watermark to some higher noise level (σ = 25), and then denoise it with FFDNet (adding higher level of noise in noise map, e.g σ = 50), then this watermark disappears from the image, while the rest of the image remains relatively clear. It's drawback is that the image becomes a bit blurrier, but the watermark is gone.
 
-### Baseline plan (data, model(s), metrics)
+![watermark_removal](assets/readme_assets/interesting_discovery.png)
 
-The idea is:
+### Model Combination
+I've also tried combining models using different strategies, such as:
+- Averaging outputs of models using mean or median
+- Averaging outputs of models using weighted average
+- Averating outputs of models using median
 
-1. Create and train a model for image recognision in FP32
-2. Create and train a model in the same way but using some quantization methods (Using QAT, PTQ, DRQ, or combination of them)
-3. Compare metrics of those models
-4. (OPTIONAL) Weight Pruning
+![ensable_results](assets/readme_assets/ensable_results.png)
 
-The conclusion, I will include:
-- Is the loss of model accuracy due to quantization acceptable?
-- Is the model size reduction significant?
-- Is model inference faster?
+And well, Images gained something around 0.5 - 1 p.p. in PSNR, but this method requires running all three models,
+    which makes it impractical in real-world applications.
 
-- Metrics:
-    * Accuracy
-    * Model size
-    * Latency
-    * Throughput
-    * RAM / VRAM usage
+### Attempt of controlling the noise level while masking (for Noise2Void)
 
-### Constraints & resources, risks, and a rough timeline
+While picking masked pixels randomly is a good approach, I wanted to see if controlling the noise level of masked pixels would improve the results. I decided to mask pixels with higher gradient magnitude more often, as they are more likely to contain important structures (such as shapes, borders). I thought that by focusing on these pixels, the model would learn to denoise more effectively (by preserving more details and keeping the denoised image sharper). But...
+![n2v_gradient](assets/readme_assets/gradient_01.png)
 
-* PyTorch
-* TensorFlow,
-* TensorFLow Lite - framework that converts a pre-trained model in TensorFlow to a special format that can be optimized for speeed or storage
+It resolulted in generating images with lower PSNR than the noised images. This approach focued more on black areas, removing details from the image instead of denoising it properly. Not sure what went wrong here, but I will try to investigate it further in the future.
 
-### References
-
-* https://www.kaggle.com/code/ashusma/understanding-tf-lite-and-model-optimization
-* https://selek.tech/posts/static-vs-dynamic-quantization-in-machine-learning/
-
-### Links to candidate datasets
-
-* https://www.kaggle.com/datasets/bhavikjikadara/dog-and-cat-classification-dataset
-* https://www.kaggle.com/datasets/alessiocorrado99/animals10
+### Other results
+**DnCNN Analysis**
+![dncnn_results](assets/readme_assets/presentation_dncnn_analysis.png)
+**FFDNet Analysis**
+![ffdnet_results](assets/readme_assets/presentation_ffdnet_analysis.png)

@@ -1,4 +1,17 @@
+"""
+    dnCNN.py - Defines the DnCNN model architecture and data loaders for training, validation, and testing.
+    Also includes training loop with early stopping and a function to denoise images using the trained model.
+"""
+
+import os
+import sys
+
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 from includes import *
+
 import dataset
 import NoisyImageDataset
 

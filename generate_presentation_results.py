@@ -1,3 +1,10 @@
+"""
+
+    generate_presentation_results.py - Generates tehe compirison between FFDNet and DnCNN.
+    It compares PSNR gains and inference times.
+
+"""
+
 
 import os
 import sys
@@ -8,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F_torch
 import matplotlib.pyplot as plt
 from PIL import Image
+from includes import *
 
 # Add paths
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -221,9 +229,9 @@ def main():
 
     # DnCNN
     dncnn = DnCNN(in_channels=1, depth=17, num_filters=64).to(device)
-    dncnn_path = os.path.join(BASE_DIR, 'dnCNN_model.pth')
+    dncnn_path = os.path.join(MODEL_DIR, 'dnCNN_model.pth')
     if not os.path.exists(dncnn_path):
-        dncnn_path = os.path.join(BASE_DIR, 'best_dncnn_checkpoint.pth') # Try alternative
+        dncnn_path = os.path.join(MODEL_DIR, 'best_dncnn_checkpoint.pth') # Try alternative
         
     if os.path.exists(dncnn_path):
         ckpt = torch.load(dncnn_path, map_location=device, weights_only=False)

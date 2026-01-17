@@ -222,6 +222,6 @@ if __name__ == "__main__":
         sys.exit(1)
         
     # Test on just one image for quick verification
-    img_name = clean_images[0]
+    img_name = "5212203576_df70d094bb_c.jpg"
     clean_path = os.path.join(clean_dir, img_name)
     comprehensive_test(model, clean_path, device)

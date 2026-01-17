@@ -4,4 +4,4 @@ __pycache__/
 DnCNN/__pycache__/
 Noise2Void/__pycache__/
 FFDnet/__pycache__/
-*.png
+/*.png

@@ -116,27 +116,20 @@ def multi_active_pixels(patch, n_pix, n_rad=5, use_gradient=False, gradient_bias
     h, w = patch.shape[1], patch.shape[2]
     
     if use_gradient:
-        # GRADIENT-BASED MASKING
-        # Convert to numpy for gradient calculation
         patch_np = patch[0].cpu().numpy()
         
-        # Calculate gradient magnitude using Sobel
         grad_x = cv2.Sobel(patch_np, cv2.CV_32F, 1, 0, ksize=3)
         grad_y = cv2.Sobel(patch_np, cv2.CV_32F, 0, 1, ksize=3)
         grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
         
-        # Flatten gradient map
         grad_flat = grad_magnitude.flatten()
         
-        # Normalize to create probability distribution
         epsilon = 1e-8
         grad_prob = (grad_flat + epsilon) / (grad_flat.sum() + epsilon)
         
-        # Number of pixels to sample from high-gradient vs random
         n_gradient = int(n_pix * gradient_bias)
         n_random = n_pix - n_gradient
         
-        # Sample pixels based on gradient probability
         sampled_indices = []
         
         if n_gradient > 0:
@@ -299,9 +292,9 @@ def n2v_evaluate(model, criterion, data_loader, device):
 if __name__ == "__main__":
     test_img_arr, train_img_arr, val_img_arr, noisy_test_img_arr, noisy_train_img_arr, noisy_val_img_arr = load_and_process_dataset(GRAY_DATASET_DIR)
 
-    test_dataset = N2VDataset(noisy_test_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=True, gradient_bias=0.7)
-    train_dataset = N2VDataset(noisy_train_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=True, gradient_bias=0.7)
-    val_dataset = N2VDataset(noisy_val_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=True, gradient_bias=0.7)
+    test_dataset = N2VDataset(noisy_test_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=False, gradient_bias=0.7)
+    train_dataset = N2VDataset(noisy_train_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=False, gradient_bias=0.7)
+    val_dataset = N2VDataset(noisy_val_img_arr, patch_size=64, stride=48, perc_active=2, n_rad=5, use_gradient=False, gradient_bias=0.7)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -345,7 +338,7 @@ if __name__ == "__main__":
         
         # Save checkpoint every 5 epochs
         if (epoch + 1) % 5 == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f'n2v_epoch_{epoch+1}_gradient.pth')
+            checkpoint_path = os.path.join(checkpoint_dir, f'n2v_epoch_{epoch+1}.pth')
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': network.state_dict(),
@@ -358,12 +351,12 @@ if __name__ == "__main__":
         # Save best model
         if test_loss < best_loss:
             best_loss = test_loss
-            best_model_path = os.path.join(CURR_DIR, 'best_n2v_model_gradient.pth')
+            best_model_path = os.path.join(CURR_DIR, 'best_n2v_model.pth')
             torch.save(network.state_dict(), best_model_path)
             print(f'Best model saved with test loss: {best_loss:.4f}')
 
     # save final model
-    model_path = os.path.join(CURR_DIR, 'n2v_unet_model_gradient.pth')
+    model_path = os.path.join(CURR_DIR, 'n2v_unet_model.pth')
     torch.save(network.state_dict(), model_path)
     print(f'Final model saved: {model_path}')
 
