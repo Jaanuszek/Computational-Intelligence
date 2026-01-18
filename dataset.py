@@ -113,6 +113,10 @@ def calculate_psnr(img1, img2):
 def calculate_ssim(img1, img2):
     return ssim(img1, img2, data_range=1.0)
 
+def load_image(path):
+    img = Image.open(path).convert('L')
+    return np.array(img).astype(np.float32) / 255.0
+
 def process_images(input_dir, output_dir, sigma=None):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

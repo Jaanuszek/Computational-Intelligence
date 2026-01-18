@@ -31,19 +31,7 @@ from DnCNN.dnCNN import DnCNN
 from FFDnet import FFDNet
 from simple_unet import SimpleUNet
 
-
-def calculate_psnr(img1, img2):
-    """Calculate PSNR between two images (0-1 range)"""
-    mse = np.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return float('inf')
-    return 10 * np.log10(1.0 / mse)
-
-
-def calculate_ssim(img1, img2):
-    """Calculate SSIM between two images (0-1 range)"""
-    return ssim(img1, img2, data_range=1.0)
-
+import dataset
 
 class EnsembleDenoiser:
     """
@@ -324,8 +312,8 @@ def test_ensemble_on_image(image_path, sigma=25, device='cuda'):
     print(f"{'='*80}")
     
     # Noisy metrics
-    psnr_noisy = calculate_psnr(clean_img, noisy_img)
-    ssim_noisy = calculate_ssim(clean_img, noisy_img)
+    psnr_noisy = dataset.calculate_psnr(clean_img, noisy_img)
+    ssim_noisy = dataset.calculate_ssim(clean_img, noisy_img)
     print(f"Noisy Image - PSNR: {psnr_noisy:.2f} dB, SSIM: {ssim_noisy:.4f}")
     print(f"{'='*80}")
     
@@ -334,8 +322,8 @@ def test_ensemble_on_image(image_path, sigma=25, device='cuda'):
         denoised = ensemble.denoise(noisy_img, sigma=sigma, method=method)
         inference_time = time.time() - start_time
         
-        psnr = calculate_psnr(clean_img, denoised)
-        ssim_val = calculate_ssim(clean_img, denoised)
+        psnr = dataset.calculate_psnr(clean_img, denoised)
+        ssim_val = dataset.calculate_ssim(clean_img, denoised)
         
         results[method] = {
             'image': denoised,
@@ -421,8 +409,8 @@ def benchmark_ensemble(test_images_dir, sigma=25, device='cuda', num_images=10):
             denoised = ensemble.denoise(noisy_img, sigma=sigma, method=method)
             inference_time = time.time() - start_time
             
-            psnr = calculate_psnr(clean_img, denoised)
-            ssim_val = calculate_ssim(clean_img, denoised)
+            psnr = dataset.calculate_psnr(clean_img, denoised)
+            ssim_val = dataset.calculate_ssim(clean_img, denoised)
             
             results[method]['psnr'].append(psnr)
             results[method]['ssim'].append(ssim_val)
