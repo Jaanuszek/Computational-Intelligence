@@ -225,6 +225,7 @@ def main():
         print("✓ FFDNet loaded")
     else:
         print(f"✗ FFDNet model not found at {ffdnet_path}!")
+        print("Please train it using FFDnet.py")
         return
 
     # DnCNN
@@ -241,7 +242,8 @@ def main():
             dncnn.load_state_dict(ckpt)
         print(f"✓ DnCNN loaded ({dncnn_path})")
     else:
-        print("✗ DnCNN model not found! Comparison will be incomplete.")
+        print(f"✗ DnCNN model not found at {dncnn_path}!")
+        print("Please train it using DnCNN.py")
         dncnn = None
 
     # 2. Load Test Image

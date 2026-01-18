@@ -56,13 +56,12 @@ class NoisyImageDataset(Dataset):
         all_clear_patches = torch.cat(all_clear_patches)
         all_noisy_patches = torch.cat(all_noisy_patches)
 
-        # Save in (noisy, clear) order so loading assignment matches (noisy_patches, clear_patches)
         torch.save((all_noisy_patches, all_clear_patches), out_path)
         print(f"Saved preprocessed patches to {out_path}, total patches: {all_clear_patches.size(0)}")
         return all_noisy_patches, all_clear_patches
 
     def __len__(self):
-        return len(self.clear_patches) # assuming that clear_image_dir and noisy_image_dir have the same number of images
+        return len(self.clear_patches)
 
     def __getitem__(self, idx):
         return self.noisy_patches[idx], self.clear_patches[idx]
@@ -100,11 +99,9 @@ class DynamicNoisyDataset(Dataset):
         all_clear_patches = []
 
         for cpath in clear_paths:
-            # Load and transform image to tensor
             img = Image.open(cpath).convert('L')
-            clear_image = self.transform(img) # This should return a Tensor
+            clear_image = self.transform(img)
             
-            # Unfold to get patches
             patches = clear_image.unfold(1, self.patch_size, self.stride).unfold(2, self.patch_size, self.stride)
             patches = patches.contiguous().view(-1, 1, self.patch_size, self.patch_size)
             
@@ -124,10 +121,8 @@ class DynamicNoisyDataset(Dataset):
     def __getitem__(self, idx):
         clean_patch = self.clear_patches[idx]
         
-        # Generate random sigma for this patch
         sigma = np.random.uniform(self.sigma_min, self.sigma_max)
         
-        # Add noise
         noise = torch.randn_like(clean_patch) * (sigma / 255.0)
         noisy_patch = clean_patch + noise
         

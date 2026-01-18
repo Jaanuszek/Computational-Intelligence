@@ -6,34 +6,13 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from includes import *
-import torch.nn.functional as F_torch
 from FFDnet import FFDNet, FFDNetConfig
+from DnCNN.dnCNN import DnCNN
 from test_ffdnet import denoise_image as ffdnet_denoise
+import dataset
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-
-class DnCNN(nn.Module):
-    """DnCNN model for comparison"""
-    def __init__(self, in_channels=1, depth=17, num_filters=64):
-        super(DnCNN, self).__init__()
-        layers = []
-        
-        layers.append(nn.Conv2d(in_channels=in_channels, out_channels=num_filters, kernel_size=3, padding=1, bias=False))
-        layers.append(nn.ReLU(inplace=True))
-        
-        for _ in range(depth - 2):
-            layers.append(nn.Conv2d(in_channels=num_filters, out_channels=num_filters, kernel_size=3, padding=1, bias=False))
-            layers.append(nn.BatchNorm2d(num_filters))
-            layers.append(nn.ReLU(inplace=True))
-        
-        layers.append(nn.Conv2d(in_channels=num_filters, out_channels=in_channels, kernel_size=3, padding=1, bias=False))
-        
-        self.dncnn = nn.Sequential(*layers)
-        
-    def forward(self, x):
-        return self.dncnn(x)
 
 
 def denoise_dncnn(model, image_path, device='cuda'):
@@ -245,6 +224,7 @@ def main():
         print(f"✓ Loaded FFDNet from {ffdnet_path}")
     else:
         print(f"✗ FFDNet model not found at {ffdnet_path}")
+        print("Please train it using FFDnet.py")
         return
     
     # Load DnCNN
@@ -255,6 +235,7 @@ def main():
     if os.path.exists(dncnn_path):
         dncnn_model.load_state_dict(torch.load(dncnn_path, map_location=device))
         print(f"✓ Loaded DnCNN from {dncnn_path}")
+        print("Please train it using DnCNN.py")
     else:
         # Try alternative paths
         alt_paths = ['../best_dncnn_checkpoint.pth', '../../dnCNN_model.pth', '../../best_dncnn_checkpoint.pth']
@@ -274,8 +255,6 @@ def main():
             print("✗ DnCNN model not found. Proceeding with FFDNet only.")
             dncnn_model = None
     
-    # Find test image
-    import dataset
     test_dir = dataset.NOISY_TEST_DIR
     
     if os.path.exists(test_dir):

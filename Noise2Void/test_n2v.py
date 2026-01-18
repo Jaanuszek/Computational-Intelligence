@@ -17,29 +17,21 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from includes import *
+import dataset
+
 
 GRAY_DATASET_DIR = os.path.join(ROOT_DIR, 'datasets', 'Gray')
 
-def normalize_img(img):
-    return img.astype(np.float32) / 255.0
-
-def add_gaussian_noise(img, sigma=25):
-    noise = np.random.normal(0, sigma/255.0, img.shape).astype(np.float32)
-    noisy_img = img + noise
-    noisy_img = np.clip(noisy_img, 0.0, 1.0)
-    return noisy_img
 
 def denoise_image(model, noisy_img, device):
     """Denoise a single image using the trained model"""
     model.eval()
     
-    # Convert to tensor and add batch + channel dimensions
     img_tensor = torch.tensor(noisy_img, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
     
     with torch.no_grad():
         denoised = model(img_tensor)
     
-    # Convert back to numpy
     denoised = denoised.squeeze().cpu().numpy()
     denoised = np.clip(denoised, 0.0, 1.0)
     
@@ -52,8 +44,8 @@ def calculate_mean_psnr(model, device, numImg, test_dir, test_files, sigma=25):
         image = test_files[i]
         test_img_path = os.path.join(test_dir, image)
         img = cv2.imread(test_img_path, cv2.IMREAD_GRAYSCALE)
-        img = normalize_img(img)
-        noisy_img = add_gaussian_noise(img, sigma=sigma)
+        img = dataset.normalize_img(img)
+        noisy_img = dataset.add_gaussian_noise(img, sigma_255=sigma)
         denoised_img = denoise_image(model, noisy_img, device)
 
         mse_noisy = np.mean((img - noisy_img) ** 2)
@@ -101,11 +93,11 @@ if __name__ == "__main__":
     
     # Load and process image
     img = cv2.imread(test_img_path, cv2.IMREAD_GRAYSCALE)
-    img = normalize_img(img)
+    img = dataset.normalize_img(img)
     
     # Add noise
     sigma = 25
-    noisy_img = add_gaussian_noise(img, sigma=sigma)
+    noisy_img = dataset.add_gaussian_noise(img, sigma_255=sigma)
     
     # Denoise
     denoised_img = denoise_image(model, noisy_img, device)
