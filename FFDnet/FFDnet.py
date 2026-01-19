@@ -12,9 +12,9 @@ import torch.nn.functional as F_torch
 import dataset
 import NoisyImageDataset
 
+PATH_TO_FFDNET_MODEL = os.path.join(MODEL_DIR, "ffdnet_model.pth")
+
 class FFDNetConfig:
-    """Configuration for FFDNet training"""
-    # Dataset paths
     clean_train_dir = dataset.GRAY_TRAIN_DIR
     noisy_train_dir = dataset.NOISY_TRAIN_DIR
     clean_val_dir = dataset.GRAY_VALIDATE_DIR
@@ -67,23 +67,14 @@ class PixelShuffle(nn.Module):
 
 
 class FFDNet(nn.Module):
-    """
-    FFDNet: Flexible Fast Denoising Network
-    
-    Architecture that processes downsampled image and noise map together.
-    Uses space-to-depth transformation to reduce spatial dimensions while
-    increasing channel depth, then applies Conv-BN-ReLU layers.
-    """
     def __init__(self, in_channels=1, num_features=64, num_conv_layers=15):
         super(FFDNet, self).__init__()
         
         self.in_channels = in_channels
         self.num_features = num_features
         
-        # Space-to-depth transformation (downscale by 2)
         self.space_to_depth = nn.PixelUnshuffle(downscale_factor=2)
         
-        # After space-to-depth: in_channels*4 + 1 (noise map)
         input_features = in_channels * 4 + 1
         
         layers = []
@@ -157,7 +148,7 @@ class EarlyStopping:
         self.best_optim_dict = None
         self.best_epoch = -1
     
-    def __call__(self, val_loss, model_dict, optim_dict, epoch, save_path='best_ffdnet_checkpoint.pth'):
+    def __call__(self, val_loss, model_dict, optim_dict, epoch, save_path=os.path.join(MODEL_DIR, 'best_ffdnet_checkpoint.pth')):
         if (self.min_loss - val_loss) > self.min_delta:
             self.counter = 0
             self.min_loss = val_loss
@@ -183,7 +174,6 @@ class EarlyStopping:
 
 
 def train_epoch(model, train_loader, criterion, optimizer, device, default_sigma):
-    """Train for one epoch"""
     model.train()
     train_loss = 0.0
     
@@ -206,14 +196,10 @@ def train_epoch(model, train_loader, criterion, optimizer, device, default_sigma
         clean_patches = clean_patches.to(device)
         
         optimizer.zero_grad()
-        
-        # Predict noise
+    
         predicted_noise = model(noisy_patches, sigma_map)
-        
-        # Reconstruct clean image
         denoised = noisy_patches - predicted_noise
-        
-        # Loss
+    
         loss = criterion(denoised, clean_patches)
         loss.backward()
         optimizer.step()
@@ -224,7 +210,6 @@ def train_epoch(model, train_loader, criterion, optimizer, device, default_sigma
 
 
 def validate_epoch(model, val_loader, criterion, device, sigma, save_samples=False, epoch=0):
-    """Validate for one epoch"""
     model.eval()
     val_loss = 0.0
     
@@ -264,75 +249,95 @@ def validate_epoch(model, val_loader, criterion, device, sigma, save_samples=Fal
     
     return val_loss / len(val_loader)
 
-
-def visualize_results(model, test_loader, device, sigma, num_samples=4):
-    """Visualize denoising results"""
-    model.eval()
+def train_model(model, config, train_loader, val_loader, device) -> dict[str, list]:
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    scheduler = CosineAnnealingLR(optimizer, T_max=config.num_epochs)
     
-    with torch.no_grad():
-        test_batch = next(iter(test_loader))
-        noisy_patches, clean_patches = test_batch
-        noisy_patches = noisy_patches[:num_samples].to(device)
-        clean_patches = clean_patches[:num_samples].to(device)
+    early_stop = EarlyStopping(tolerance=8, min_delta=0.0001)
+    
+    history = {'train_loss': [], 'val_loss': []}
+    
+    print(f"\nStarting training for {config.num_epochs} epochs...")
+    print(f"Noise level (sigma): Dynamic [0, 75]\n")
+    
+    for epoch in range(config.num_epochs):
+        # Train
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, config.sigma_train)
+        history['train_loss'].append(train_loss)
         
-        batch_size = noisy_patches.size(0)
-        sigma_map = torch.full((batch_size, 1, noisy_patches.size(2), noisy_patches.size(3)),
-                               sigma / 255.0, dtype=torch.float32, device=device)
+        # Validate
+        save_samples = (epoch % 5 == 0) or (epoch == config.num_epochs - 1)
+        val_loss = validate_epoch(model, val_loader, criterion, device, config.sigma_train, 
+                                  save_samples=save_samples, epoch=epoch)
+        history['val_loss'].append(val_loss)
         
-        predicted_noise = model(noisy_patches, sigma_map)
-        denoised_patches = noisy_patches - predicted_noise
+        scheduler.step()
         
-        # Move to CPU for visualization
-        noisy_patches = noisy_patches.cpu()
-        clean_patches = clean_patches.cpu()
-        predicted_noise = predicted_noise.cpu()
-        denoised_patches = denoised_patches.cpu()
+        print(f"Epoch {epoch + 1}/{config.num_epochs} | "
+              f"Train Loss: {train_loss:.6f} | "
+              f"Val Loss: {val_loss:.6f} | "
+              f"LR: {optimizer.param_groups[0]['lr']:.6f}")
         
-        for idx in range(num_samples):
-            noisy = noisy_patches[idx].squeeze().numpy()
-            clean = clean_patches[idx].squeeze().numpy()
-            noise = predicted_noise[idx].squeeze().numpy()
-            denoised = denoised_patches[idx].squeeze().numpy()
-            
-            fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-            
-            axes[0].imshow(noisy, cmap='gray', vmin=0, vmax=1)
-            axes[0].set_title('Noisy Patch')
-            axes[0].axis('off')
-            
-            axes[1].imshow(clean, cmap='gray', vmin=0, vmax=1)
-            axes[1].set_title('Clean Patch')
-            axes[1].axis('off')
-            
-            axes[2].imshow(noise, cmap='gray')
-            axes[2].set_title('Predicted Noise')
-            axes[2].axis('off')
-            
-            axes[3].imshow(denoised, cmap='gray', vmin=0, vmax=1)
-            axes[3].set_title('Denoised Patch')
-            axes[3].axis('off')
-            
-            plt.tight_layout()
-            plt.show()
+        early_stop(val_loss, model.state_dict(), optimizer.state_dict(), epoch)
+        
+        if early_stop.early_stop:
+            print(f"\n✓ Early stopping triggered at epoch {epoch + 1}")
+            print(f"Best model was at epoch {early_stop.best_epoch + 1} with val_loss={early_stop.min_loss:.6f}")
+            break
+    
+    torch.save(model.state_dict(), PATH_TO_FFDNET_MODEL)
+    print(f"\n✓ Final model saved to {PATH_TO_FFDNET_MODEL}")
 
+    return history
+
+def denoise_image(model, noisy_image_tensor, device, sigma):
+    model.eval()
+    with torch.no_grad():
+        noisy_image_tensor = noisy_image_tensor.to(device)
+        batch_size = noisy_image_tensor.size(0)
+        sigma_map = torch.full((batch_size, 1, noisy_image_tensor.size(2), noisy_image_tensor.size(3)),
+                               sigma / 255.0, dtype=torch.float32, device=device)
+        predicted_noise = model(noisy_image_tensor, sigma_map)
+        denoised_image = noisy_image_tensor - predicted_noise
+    return denoised_image.cpu()
+
+def plot_image(path_to_image, model, device, sigma):
+    """Plot denoising result for a single image"""
+    image = Image.open(path_to_image).convert('L')
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+    image_tensor = transform(image).unsqueeze(0)
+    
+    denoised_tensor = denoise_image(model, image_tensor, device, sigma)
+    
+    noisy_image_np = image_tensor.squeeze().numpy()
+    denoised_image_np = denoised_tensor.squeeze().numpy()
+    
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(noisy_image_np, cmap='gray', vmin=0, vmax=1)
+    axes[0].set_title('Noisy Image')
+    axes[0].axis('off')
+    
+    axes[1].imshow(denoised_image_np, cmap='gray', vmin=0, vmax=1)
+    axes[1].set_title('Denoised Image')
+    axes[1].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
 
 def main():
     """Main training loop"""
     config = FFDNetConfig()
     
-    # Setup device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # Transform - ToTensor normalizes to [0,1]
     transform = transforms.Compose([
         transforms.Resize((config.image_size, config.image_size)),
         transforms.ToTensor(),
     ])
-    
-    # Create datasets
-    print("Loading datasets...")
-    # Use DynamicNoisyDataset for training to handle variable noise levels [0, 75]
     train_dataset = NoisyImageDataset.DynamicNoisyDataset(
         clear_image_dir=config.clean_train_dir,
         sigma_min=0,
@@ -364,12 +369,11 @@ def main():
         transform=transform
     )
     
-    # Create data loaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=0,
         pin_memory=True
     )
     
@@ -377,109 +381,30 @@ def main():
         val_dataset,
         batch_size=config.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=0,
         pin_memory=True
     )
     
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True
-    )
-    
-    print(f"Train patches: {len(train_dataset)}")
-    print(f"Val patches: {len(val_dataset)}")
-    print(f"Test patches: {len(test_dataset)}")
-    
-    # Create model
-    model = FFDNet(
-        in_channels=config.in_channels,
-        num_features=config.num_features,
-        num_conv_layers=config.num_conv_layers
-    ).to(device)
-    
-    print(f"\nModel parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
-    
-    # Loss and optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
-    scheduler = CosineAnnealingLR(optimizer, T_max=config.num_epochs)
-    
-    # Early stopping
-    early_stop = EarlyStopping(tolerance=8, min_delta=0.0001)
-    
-    # Training history
-    history = {'train_loss': [], 'val_loss': []}
-    
-    # Training loop
-    print(f"\nStarting training for {config.num_epochs} epochs...")
-    print(f"Noise level (sigma): Dynamic [0, 75]\n")
-    
-    for epoch in range(config.num_epochs):
-        # Train
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, config.sigma_train)
-        history['train_loss'].append(train_loss)
-        
-        # Validate
-        save_samples = (epoch % 5 == 0) or (epoch == config.num_epochs - 1)
-        val_loss = validate_epoch(model, val_loader, criterion, device, config.sigma_train, 
-                                  save_samples=save_samples, epoch=epoch)
-        history['val_loss'].append(val_loss)
-        
-        # Update learning rate
-        scheduler.step()
-        
-        # Print progress
-        print(f"Epoch {epoch + 1}/{config.num_epochs} | "
-              f"Train Loss: {train_loss:.6f} | "
-              f"Val Loss: {val_loss:.6f} | "
-              f"LR: {optimizer.param_groups[0]['lr']:.6f}")
-        
-        # Early stopping check
-        early_stop(val_loss, model.state_dict(), optimizer.state_dict(), epoch)
-        
-        if early_stop.early_stop:
-            print(f"\n✓ Early stopping triggered at epoch {epoch + 1}")
-            print(f"Best model was at epoch {early_stop.best_epoch + 1} with val_loss={early_stop.min_loss:.6f}")
-            break
-    
-    # Save final model
-    model_path = "ffdnet_model.pth"
-    torch.save(model.state_dict(), model_path)
-    print(f"\n✓ Final model saved to {model_path}")
-    
-    # Load best model for testing
-    if early_stop.best_model_dict is not None:
-        model.load_state_dict(early_stop.best_model_dict)
-        print(f"✓ Loaded best model (epoch {early_stop.best_epoch + 1}) for testing")
-    
-    # Plot training history
-    plt.figure(figsize=(10, 5))
-    plt.plot(history['train_loss'], label='Train Loss')
-    plt.plot(history['val_loss'], label='Val Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('FFDNet Training History')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('ffdnet_training_history.png', dpi=150, bbox_inches='tight')
-    plt.show()
-    
-    # Visualize test results
-    print("\nVisualizing test results...")
-    visualize_results(model, test_loader, device, config.sigma_train, num_samples=4)
-    
-    # Test different noise levels
-    print("\nTesting with different noise levels...")
-    for test_sigma in [15, 25, 50, 75]:
-        print(f"\nTesting with sigma={test_sigma}")
-        test_loss = validate_epoch(model, test_loader, criterion, device, test_sigma)
-        print(f"Test Loss (sigma={test_sigma}): {test_loss:.6f}")
-    
-    print("\n✓ Training complete!")
+    model = None
+    if not os.path.exists(PATH_TO_FFDNET_MODEL):
+        model = FFDNet(
+            in_channels=config.in_channels,
+            num_features=config.num_features,
+            num_conv_layers=config.num_conv_layers
+        ).to(device)
+        train_model(model, config, train_loader, val_loader, device)
+    else:
+        model = FFDNet(
+            in_channels=config.in_channels,
+            num_features=config.num_features,
+            num_conv_layers=config.num_conv_layers
+        ).to(device)
+        model.load_state_dict(torch.load(PATH_TO_FFDNET_MODEL))
 
+    random_image = np.random.choice(os.listdir(dataset.NOISY_VALIDATE_DIR))
+    path_to_image = os.path.join(dataset.NOISY_VALIDATE_DIR, random_image)
+    plot_image(path_to_image, model, device, sigma=35)
+    
 
 if __name__ == "__main__":
     main()

@@ -8,46 +8,17 @@ from tqdm import tqdm
 import os
 import cv2
 from simple_unet import SimpleUNet
+import sys
 
-
-# I will not resue the code from the previous models dnCNN and FFDNet,
-# It's just to messy, I will do that once again here
-
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+import dataset
+    
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(CURR_DIR, '..'))
 
 GRAY_DATASET_DIR = os.path.join(ROOT_DIR, 'datasets', 'Gray')
-
-
-def normalize_img(img):
-    return img.astype(np.float32) / 255.0
-
-def add_gaussian_noise(img_arr, sigma=25):
-    """
-    Docstring for add_gaussian_noise
-    
-    :param img_arr: Normalized image array (0-1 scale)
-    :param sigma: Normalized standard deviation of the Gaussian noise to be added (0-255 scale)
-    """
-    noisy_arr = []
-    for img in img_arr:
-        noise = np.random.normal(0, sigma/255.0, img.shape).astype(np.float32)
-        noisy_img = img + noise
-        noisy_img = np.clip(noisy_img, 0.0, 1.0)
-        noisy_arr.append(noisy_img)
-    return noisy_arr
-
-def add_gaussian_noise_to_image(img, sigma=25):
-    """
-    Docstring for add_gaussian_noise_to_image
-    
-    :param img: Normalized image (0-1 scale)
-    :param sigma: Normalized standard deviation of the Gaussian noise to be added (0-255 scale)
-    """
-    noise = np.random.normal(0, sigma/255.0, img.shape).astype(np.float32)
-    noisy_img = img + noise
-    noisy_img = np.clip(noisy_img, 0.0, 1.0)
-    return noisy_img
 
 def load_and_process_dataset(path):
     """
@@ -72,8 +43,8 @@ def load_and_process_dataset(path):
             if file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
                 img_path = os.path.join(full_dir, file)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-                img = normalize_img(img)
-                noisy_img = add_gaussian_noise_to_image(img, sigma=25)
+                img = dataset.normalize_img(img)
+                noisy_img = dataset.add_gaussian_noise(img, sigma_255=25)
                 if img is None:
                     print(f"Warning: Unable to read image {img_path}. Skipping.")
                     continue

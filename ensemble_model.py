@@ -19,6 +19,7 @@ import os
 import sys
 from skimage.metrics import structural_similarity as ssim
 import time
+import pandas as pd
 
 # Add paths for imports
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,19 +32,7 @@ from DnCNN.dnCNN import DnCNN
 from FFDnet import FFDNet
 from simple_unet import SimpleUNet
 
-
-def calculate_psnr(img1, img2):
-    """Calculate PSNR between two images (0-1 range)"""
-    mse = np.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return float('inf')
-    return 10 * np.log10(1.0 / mse)
-
-
-def calculate_ssim(img1, img2):
-    """Calculate SSIM between two images (0-1 range)"""
-    return ssim(img1, img2, data_range=1.0)
-
+import dataset
 
 class EnsembleDenoiser:
     """
@@ -324,8 +313,8 @@ def test_ensemble_on_image(image_path, sigma=25, device='cuda'):
     print(f"{'='*80}")
     
     # Noisy metrics
-    psnr_noisy = calculate_psnr(clean_img, noisy_img)
-    ssim_noisy = calculate_ssim(clean_img, noisy_img)
+    psnr_noisy = dataset.calculate_psnr(clean_img, noisy_img)
+    ssim_noisy = dataset.calculate_ssim(clean_img, noisy_img)
     print(f"Noisy Image - PSNR: {psnr_noisy:.2f} dB, SSIM: {ssim_noisy:.4f}")
     print(f"{'='*80}")
     
@@ -334,8 +323,8 @@ def test_ensemble_on_image(image_path, sigma=25, device='cuda'):
         denoised = ensemble.denoise(noisy_img, sigma=sigma, method=method)
         inference_time = time.time() - start_time
         
-        psnr = calculate_psnr(clean_img, denoised)
-        ssim_val = calculate_ssim(clean_img, denoised)
+        psnr = dataset.calculate_psnr(clean_img, denoised)
+        ssim_val = dataset.calculate_ssim(clean_img, denoised)
         
         results[method] = {
             'image': denoised,
@@ -421,8 +410,8 @@ def benchmark_ensemble(test_images_dir, sigma=25, device='cuda', num_images=10):
             denoised = ensemble.denoise(noisy_img, sigma=sigma, method=method)
             inference_time = time.time() - start_time
             
-            psnr = calculate_psnr(clean_img, denoised)
-            ssim_val = calculate_ssim(clean_img, denoised)
+            psnr = dataset.calculate_psnr(clean_img, denoised)
+            ssim_val = dataset.calculate_ssim(clean_img, denoised)
             
             results[method]['psnr'].append(psnr)
             results[method]['ssim'].append(ssim_val)
@@ -432,6 +421,8 @@ def benchmark_ensemble(test_images_dir, sigma=25, device='cuda', num_images=10):
     print(f"\n{'Method':<25} {'Avg PSNR':<12} {'Avg SSIM':<12} {'Avg Time':<12}")
     print(f"{'='*100}")
     
+    avg_results = {}
+
     for method in methods:
         avg_psnr = np.mean(results[method]['psnr'])
         avg_ssim = np.mean(results[method]['ssim'])
@@ -441,8 +432,15 @@ def benchmark_ensemble(test_images_dir, sigma=25, device='cuda', num_images=10):
         
         print(f"{method:<25} {avg_psnr:6.2f}±{std_psnr:4.2f} dB   "
               f"{avg_ssim:.4f}±{std_ssim:.4f}   {avg_time:6.3f}s")
+        avg_results[method] = {
+            'avg_psnr': avg_psnr,
+            'std_psnr': std_psnr,
+            'avg_ssim': avg_ssim,
+            'std_ssim': std_ssim,
+            'avg_time': avg_time
+        }
     
-    return results
+    return results, avg_results
 
 
 if __name__ == "__main__":
@@ -464,7 +462,18 @@ if __name__ == "__main__":
             print("\n" + "="*100)
             print("Running full benchmark...")
             print("="*100)
-            benchmark_ensemble(test_img_dir, sigma=25, device=device, num_images=10)
+            _, avg_results = benchmark_ensemble(test_img_dir, sigma=25, device=device, num_images=100)
+
+            df = pd.DataFrame([
+                {
+                    'Method': method,
+                    'Avg PSNR (dB)': f"{res['avg_psnr']:.2f} ± {res['std_psnr']:.2f}",
+                    'Avg SSIM': f"{res['avg_ssim']:.4f} ± {res['std_ssim']:.4f}",
+                    'Avg Time (s)': f"{res['avg_time']:.3f}"
+                }
+                for method, res in avg_results.items()
+            ])
+            print(df)
     else:
         print(f"Test directory not found: {test_img_dir}")
         print("Please update the path to your test images.")

@@ -6,45 +6,22 @@ It also benchmarks models with controlled noise levels.
 """
 
 
-import torch
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
 import os
-import time
 import sys
-from skimage.metrics import structural_similarity as ssim
 
-# Add paths for imports
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(CURR_DIR)
 sys.path.append(os.path.join(CURR_DIR, 'FFDnet'))
 sys.path.append(os.path.join(CURR_DIR, 'Noise2Void'))
 
+from includes import *
+import dataset
 from DnCNN.dnCNN import DnCNN
 from FFDnet import FFDNet
 from Noise2Void.simple_unet import SimpleUNet
 
 ROOT_DIR = CURR_DIR
 GRAY_DATASET_DIR = os.path.join(ROOT_DIR, 'datasets', 'Gray')
-
-def normalize_img(img):
-    return img.astype(np.float32) / 255.0
-
-def add_gaussian_noise(img, sigma=25):
-    noise = np.random.normal(0, sigma/255.0, img.shape).astype(np.float32)
-    noisy_img = img + noise
-    noisy_img = np.clip(noisy_img, 0.0, 1.0)
-    return noisy_img
-
-def calculate_psnr(img1, img2):
-    mse = np.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return float('inf')
-    return 10 * np.log10(1.0 / mse)
-
-def calculate_ssim(img1, img2):
-    return ssim(img1, img2, data_range=1.0)
 
 def denoise_dncnn(model, noisy_img, device):
     model.eval()
@@ -119,6 +96,7 @@ def load_models(device):
         print(f"✓ DnCNN loaded from {dncnn_path}")
     else:
         print(f"✗ DnCNN not found at {dncnn_path}")
+        print("Please train it using DnCNN.py")
     
     # FFDNet - try final model first, then checkpoint
     ffdnet_path = os.path.join(CURR_DIR, 'models', 'ffdnet_model.pth')
@@ -140,7 +118,8 @@ def load_models(device):
         }
         print(f"✓ FFDNet loaded from {ffdnet_path}")
     else:
-        print(f"✗ FFDNet not found")
+        print(f"✗ FFDNet not found at {ffdnet_path}")
+        print("Please train it using FFDnet.py")
     
     # Noise2Void
     n2v_path = os.path.join(CURR_DIR, 'models', 'best_n2v_model.pth')
@@ -160,7 +139,7 @@ def load_models(device):
         print(f"✓ Noise2Void loaded from {n2v_path}")
     else:
         print(f"✗ Noise2Void not found at {n2v_path}")
-    
+        print("Please train it using N2V.py")
     return models
 
 def benchmark_models(models, test_images, sigma=25, device='cuda'):
@@ -178,7 +157,7 @@ def benchmark_models(models, test_images, sigma=25, device='cuda'):
     # CUDA warm-up: run each model once to initialize kernels and memory
     if device.type == 'cuda' and len(test_images) > 0:
         print("\nWarming up CUDA...")
-        warmup_img = add_gaussian_noise(test_images[0], sigma=sigma)
+        warmup_img = dataset.add_gaussian_noise(test_images[0], sigma_255=sigma)
         for model_name, model_data in models.items():
             model = model_data['model']
             denoise_fn = model_data['denoise_fn']
@@ -197,11 +176,11 @@ def benchmark_models(models, test_images, sigma=25, device='cuda'):
         print(f"Processing image {idx+1}/{len(test_images)}...")
         
         # Add noise
-        noisy_img = add_gaussian_noise(clean_img, sigma=sigma)
+        noisy_img = dataset.add_gaussian_noise(clean_img, sigma_255=sigma)
         
         # Calculate noisy metrics
-        psnr_noisy = calculate_psnr(clean_img, noisy_img)
-        ssim_noisy = calculate_ssim(clean_img, noisy_img)
+        psnr_noisy = dataset.calculate_psnr(clean_img, noisy_img)
+        ssim_noisy = dataset.calculate_ssim(clean_img, noisy_img)
         
         for model_name, model_data in models.items():
             model = model_data['model']
@@ -224,8 +203,8 @@ def benchmark_models(models, test_images, sigma=25, device='cuda'):
             inference_time = time.time() - start_time
             
             # Calculate denoised metrics
-            psnr_denoised = calculate_psnr(clean_img, denoised_img)
-            ssim_denoised = calculate_ssim(clean_img, denoised_img)
+            psnr_denoised = dataset.calculate_psnr(clean_img, denoised_img)
+            ssim_denoised = dataset.calculate_ssim(clean_img, denoised_img)
             
             # Store results
             results[model_name]['psnr_noisy'].append(psnr_noisy)
@@ -318,8 +297,8 @@ def plot_comparison(models, results):
     # Set y-axis to start from 0 to avoid negative values
     ax.set_ylim(bottom=0)
     for i, (bar, val) in enumerate(zip(bars, times)):
-        # Position text above error bar with proper offset (max of 5% of bar height or 2ms)
-        text_offset = max(val * 0.05, 2.0)
+        # Position text above error bar with proper offset (max of 5% of bar height or 0.5ms)
+        text_offset = val*0.01
         ax.text(bar.get_x() + bar.get_width()/2, val + time_stds[i] + text_offset, f'{val:.1f}', 
                 ha='center', va='bottom', fontweight='bold')
     
@@ -358,7 +337,7 @@ def plot_visual_comparison(models, test_images, sigma=25, device='cuda'):
     
     for img_idx in range(n_samples):
         clean_img = test_images[img_idx]
-        noisy_img = add_gaussian_noise(clean_img, sigma=sigma)
+        noisy_img = dataset.add_gaussian_noise(clean_img, sigma_255=sigma)
         
         # Original
         axes[img_idx, 0].imshow(clean_img, cmap='gray', vmin=0, vmax=1)
@@ -366,8 +345,8 @@ def plot_visual_comparison(models, test_images, sigma=25, device='cuda'):
         axes[img_idx, 0].axis('off')
         
         # Noisy
-        psnr_noisy = calculate_psnr(clean_img, noisy_img)
-        ssim_noisy = calculate_ssim(clean_img, noisy_img)
+        psnr_noisy = dataset.calculate_psnr(clean_img, noisy_img)
+        ssim_noisy = dataset.calculate_ssim(clean_img, noisy_img)
         axes[img_idx, 1].imshow(noisy_img, cmap='gray', vmin=0, vmax=1)
         axes[img_idx, 1].set_title(f'Noisy (σ={sigma})\nPSNR: {psnr_noisy:.2f} dB\nSSIM: {ssim_noisy:.4f}', 
                                     fontweight='bold')
@@ -385,8 +364,8 @@ def plot_visual_comparison(models, test_images, sigma=25, device='cuda'):
             else:
                 denoised_img = denoise_fn(model, noisy_img, device)
             
-            psnr_denoised = calculate_psnr(clean_img, denoised_img)
-            ssim_denoised = calculate_ssim(clean_img, denoised_img)
+            psnr_denoised = dataset.calculate_psnr(clean_img, denoised_img)
+            ssim_denoised = dataset.calculate_ssim(clean_img, denoised_img)
             psnr_gain = psnr_denoised - psnr_noisy
             
             denoised_results[model_name] = {
@@ -524,7 +503,7 @@ def main():
     for i in range(n_test):
         img_path = os.path.join(test_dir, test_files[i])
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        img = normalize_img(img)
+        img = dataset.normalize_img(img)
         test_images.append(img)
     
     # Benchmark models

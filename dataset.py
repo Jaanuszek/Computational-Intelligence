@@ -28,12 +28,6 @@ PREPROCESSED_TRAIN_DIR = os.path.join(DATASET_DIR, "Preprocessed/train_patches.p
 PREPROCESSED_TEST_DIR = os.path.join(DATASET_DIR, "Preprocessed/test_patches.pt")
 PREPROCESSED_VALIDATE_DIR = os.path.join(DATASET_DIR, "Preprocessed/validate_patches.pt")
 
-# original_dataset_dirs : list = [
-#     ORIGINAL_TEST_GROUND_TRUTH_DIR,
-#     ORIGINAL_TRAIN_GROUND_TRUTH_DIR,
-#     ORIGINAL_VALIDATE_GROUND_TRUTH_DIR,
-# ]
-
 def download_dataset():
     if not os.path.isdir(ORIGINAL_TEST_GROUND_TRUTH_DIR):
         path = kagglehub.dataset_download("tarunpathak/natural-images-with-synthetic-noise")
@@ -100,17 +94,28 @@ def sort_dataset_files():
             shutil.move(
                 os.path.join(DATASET_DIR, dir), original_dir_map[dir.lower()])
 
-
-
 def add_gaussian_noise(image, sigma_255):
-    """Adds Gaussian noise to an image.
-        It assumes that image is normalized to [0, 1].
-    """
     sigma = sigma_255 / 255.0
     noise = np.random.normal(0, sigma, image.shape)
     noisy_image = image + noise
     noisy_image = np.clip(noisy_image, 0, 1)
     return noisy_image
+
+def normalize_img(img):
+    return img.astype(np.float32) / 255.0
+
+def calculate_psnr(img1, img2):
+    mse = np.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return float('inf')
+    return 10 * np.log10(1.0 / mse)
+
+def calculate_ssim(img1, img2):
+    return ssim(img1, img2, data_range=1.0)
+
+def load_image(path):
+    img = Image.open(path).convert('L')
+    return np.array(img).astype(np.float32) / 255.0
 
 def process_images(input_dir, output_dir, sigma=None):
     if not os.path.exists(output_dir):

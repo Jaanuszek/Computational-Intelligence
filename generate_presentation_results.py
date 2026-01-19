@@ -5,7 +5,6 @@
 
 """
 
-
 import os
 import sys
 import time
@@ -17,54 +16,14 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from includes import *
 
-# Add paths
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'FFDnet'))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
-try:
-    from FFDnet import FFDNet, FFDNetConfig
-except ImportError:
-    print("Error importing FFDNet. Check paths.")
-    sys.exit(1)
+from FFDnet.FFDnet import FFDNet, FFDNetConfig
+from DnCNN.dnCNN import DnCNN
+import dataset
 
-try:
-    from dnCNN import DnCNN
-except ImportError:
-    print("Error importing DnCNN. Check paths.")
-    # Define DnCNN locally if import fails as fallback
-    class DnCNN(nn.Module):
-        def __init__(self, in_channels=1, depth=17, num_filters=64):
-            super(DnCNN, self).__init__()
-            layers = []
-            layers.append(nn.Conv2d(in_channels=in_channels, out_channels=num_filters, kernel_size=3, padding=1, bias=False))
-            layers.append(nn.ReLU(inplace=True))
-            for _ in range(depth - 2):
-                layers.append(nn.Conv2d(in_channels=num_filters, out_channels=num_filters, kernel_size=3, padding=1, bias=False))
-                layers.append(nn.BatchNorm2d(num_filters))
-                layers.append(nn.ReLU(inplace=True))
-            layers.append(nn.Conv2d(in_channels=num_filters, out_channels=in_channels, kernel_size=3, padding=1, bias=False))
-            self.dncnn = nn.Sequential(*layers)
-        def forward(self, x):
-            return self.dncnn(x)
-
-# --- Helper Functions ---
-
-def calculate_psnr(img1, img2):
-    mse = np.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return 100
-    return 20 * np.log10(1.0 / np.sqrt(mse))
-
-def add_noise(image, sigma):
-    noise = np.random.normal(0, sigma/255.0, image.shape)
-    noisy = image + noise
-    return np.clip(noisy, 0, 1)
-
-def load_image(path):
-    img = Image.open(path).convert('L')
-    return np.array(img).astype(np.float32) / 255.0
-
-# --- Inference Functions ---
 
 def run_ffdnet(model, noisy_img, sigma, device):
     model.eval()
@@ -163,7 +122,7 @@ def plot_comparison(clean, noisy, ffdnet_res, dncnn_res, sigma):
     # PSNR Comparison
     ax_psnr = fig.add_subplot(gs[1, 0])
     models = ['Noisy', 'FFDNet', 'DnCNN']
-    psnrs = [calculate_psnr(clean, noisy), ffdnet_res['psnr'], dncnn_res['psnr']]
+    psnrs = [dataset.calculate_psnr(clean, noisy), ffdnet_res['psnr'], dncnn_res['psnr']]
     colors = ['gray', 'blue', 'orange']
     bars = ax_psnr.bar(models, psnrs, color=colors)
     ax_psnr.set_title("PSNR Quality (Higher is Better)")
@@ -225,6 +184,7 @@ def main():
         print("✓ FFDNet loaded")
     else:
         print(f"✗ FFDNet model not found at {ffdnet_path}!")
+        print("Please train it using FFDnet.py")
         return
 
     # DnCNN
@@ -241,7 +201,8 @@ def main():
             dncnn.load_state_dict(ckpt)
         print(f"✓ DnCNN loaded ({dncnn_path})")
     else:
-        print("✗ DnCNN model not found! Comparison will be incomplete.")
+        print(f"✗ DnCNN model not found at {dncnn_path}!")
+        print("Please train it using DnCNN.py")
         dncnn = None
 
     # 2. Load Test Image
@@ -259,17 +220,17 @@ def main():
     img_path = os.path.join(test_dir, images[0])
     print(f"Testing on: {images[0]}")
     
-    clean_img = load_image(img_path)
+    clean_img = dataset.load_image(img_path)
     
     # 3. Run Tests
     sigma = 25
-    noisy_img = add_noise(clean_img, sigma)
-    psnr_noisy = calculate_psnr(clean_img, noisy_img)
+    noisy_img = dataset.add_gaussian_noise(clean_img, sigma)
+    psnr_noisy = dataset.calculate_psnr(clean_img, noisy_img)
     
     # FFDNet Run
     print("Running FFDNet...")
     ffd_denoised, ffd_noise, ffd_time = run_ffdnet(ffdnet, noisy_img, sigma, device)
-    ffd_psnr = calculate_psnr(clean_img, ffd_denoised)
+    ffd_psnr = dataset.calculate_psnr(clean_img, ffd_denoised)
     
     plot_single_model("FFDNet", clean_img, noisy_img, ffd_denoised, ffd_noise, psnr_noisy, ffd_psnr, ffd_time, sigma)
     
@@ -277,7 +238,7 @@ def main():
     if dncnn:
         print("Running DnCNN...")
         dn_denoised, dn_noise, dn_time = run_dncnn(dncnn, noisy_img, device)
-        dn_psnr = calculate_psnr(clean_img, dn_denoised)
+        dn_psnr = dataset.calculate_psnr(clean_img, dn_denoised)
         
         plot_single_model("DnCNN", clean_img, noisy_img, dn_denoised, dn_noise, psnr_noisy, dn_psnr, dn_time, sigma)
         

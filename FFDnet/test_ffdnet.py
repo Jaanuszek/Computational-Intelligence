@@ -8,9 +8,6 @@ import torch.nn.functional as F_torch
 from FFDnet import FFDNet, FFDNetConfig
 
 
-# -------------------------------------------------------------
-# 1. TILED INFERENCE — identyczny pipeline jak trening
-# -------------------------------------------------------------
 def ffdnet_denoise_tiled(model, noisy_tensor, sigma, patch=64, overlap=16):
     """
     Perform tiled denoising (patch-based) — REQUIRED for FFDNet trained on patches.
@@ -55,10 +52,6 @@ def ffdnet_denoise_tiled(model, noisy_tensor, sigma, patch=64, overlap=16):
 
     return denoised
 
-
-# -------------------------------------------------------------
-# 2. CORRECTED SINGLE IMAGE INFERENCE
-# -------------------------------------------------------------
 def denoise_image(model, image_path, sigma=25, device='cuda'):
     """
     FFDNet inference on full image (no tiling).
@@ -98,10 +91,6 @@ def denoise_image(model, image_path, sigma=25, device='cuda'):
 
     return denoised_tensor.squeeze().cpu().numpy()
 
-
-# -------------------------------------------------------------
-# 3. VISUALIZATION
-# -------------------------------------------------------------
 def calculate_psnr(img1, img2):
     mse = np.mean((img1 - img2) ** 2)
     if mse == 0:
@@ -170,16 +159,9 @@ def visualize_denoising(model, image_path, sigma=25, device='cuda'):
         axes[0].set_title(f'Noisy (σ={sigma})')
         axes[0].axis('off')
 
-    # axes[1].imshow(denoised, cmap='gray', vmin=0, vmax=1)
-    # axes[1].set_title('FFDNet (full image)')
-    # axes[1].axis('off')    
     plt.tight_layout()
     plt.show()
 
-
-# -------------------------------------------------------------
-# 4. BATCH DENOISING
-# -------------------------------------------------------------
 def batch_denoise(model, input_dir, output_dir, sigma=25, device='cuda'):
     device = torch.device(device)
     os.makedirs(output_dir, exist_ok=True)
@@ -200,9 +182,6 @@ def batch_denoise(model, input_dir, output_dir, sigma=25, device='cuda'):
     print("✓ Batch denoising completed.")
 
 
-# -------------------------------------------------------------
-# 5. MAIN
-# -------------------------------------------------------------
 def main():
     import argparse
 
@@ -220,12 +199,13 @@ def main():
     # Load model
     config = FFDNetConfig()
     model = FFDNet(config.in_channels, config.num_features, config.num_conv_layers).to(device)
-
-    ckpt = torch.load(args.model, map_location=device, weights_only=False)
-    if 'model_state_dict' in ckpt:
-        model.load_state_dict(ckpt['model_state_dict'])
+    ffdnet_path = os.path.join(MODEL_DIR, 'ffdnet_model.pth')
+    if os.path.exists(ffdnet_path):
+        model.load_state_dict(torch.load(ffdnet_path, map_location=device))
+        print(f"✓ Loaded model from {ffdnet_path}\n")
     else:
-        model.load_state_dict(ckpt)
+        print(f"Model {ffdnet_path} not found!")
+        sys.exit(1)
 
     if args.image:
         visualize_denoising(model, args.image, args.sigma, device)

@@ -204,6 +204,7 @@ if __name__ == "__main__":
             print(f"✓ Loaded model from {model_path}\n")
     else:
         print(f"Model {model_path} not found!")
+        print("Please train it using FFDnet.py")
         sys.exit(1)
     
     model.eval()
