@@ -19,6 +19,7 @@ import os
 import sys
 from skimage.metrics import structural_similarity as ssim
 import time
+import pandas as pd
 
 # Add paths for imports
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -420,6 +421,8 @@ def benchmark_ensemble(test_images_dir, sigma=25, device='cuda', num_images=10):
     print(f"\n{'Method':<25} {'Avg PSNR':<12} {'Avg SSIM':<12} {'Avg Time':<12}")
     print(f"{'='*100}")
     
+    avg_results = {}
+
     for method in methods:
         avg_psnr = np.mean(results[method]['psnr'])
         avg_ssim = np.mean(results[method]['ssim'])
@@ -429,8 +432,15 @@ def benchmark_ensemble(test_images_dir, sigma=25, device='cuda', num_images=10):
         
         print(f"{method:<25} {avg_psnr:6.2f}±{std_psnr:4.2f} dB   "
               f"{avg_ssim:.4f}±{std_ssim:.4f}   {avg_time:6.3f}s")
+        avg_results[method] = {
+            'avg_psnr': avg_psnr,
+            'std_psnr': std_psnr,
+            'avg_ssim': avg_ssim,
+            'std_ssim': std_ssim,
+            'avg_time': avg_time
+        }
     
-    return results
+    return results, avg_results
 
 
 if __name__ == "__main__":
@@ -452,7 +462,18 @@ if __name__ == "__main__":
             print("\n" + "="*100)
             print("Running full benchmark...")
             print("="*100)
-            benchmark_ensemble(test_img_dir, sigma=25, device=device, num_images=10)
+            _, avg_results = benchmark_ensemble(test_img_dir, sigma=25, device=device, num_images=100)
+
+            df = pd.DataFrame([
+                {
+                    'Method': method,
+                    'Avg PSNR (dB)': f"{res['avg_psnr']:.2f} ± {res['std_psnr']:.2f}",
+                    'Avg SSIM': f"{res['avg_ssim']:.4f} ± {res['std_ssim']:.4f}",
+                    'Avg Time (s)': f"{res['avg_time']:.3f}"
+                }
+                for method, res in avg_results.items()
+            ])
+            print(df)
     else:
         print(f"Test directory not found: {test_img_dir}")
         print("Please update the path to your test images.")

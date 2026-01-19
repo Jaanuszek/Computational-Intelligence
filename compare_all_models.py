@@ -297,8 +297,8 @@ def plot_comparison(models, results):
     # Set y-axis to start from 0 to avoid negative values
     ax.set_ylim(bottom=0)
     for i, (bar, val) in enumerate(zip(bars, times)):
-        # Position text above error bar with proper offset (max of 5% of bar height or 2ms)
-        text_offset = max(val * 0.05, 2.0)
+        # Position text above error bar with proper offset (max of 5% of bar height or 0.5ms)
+        text_offset = val*0.01
         ax.text(bar.get_x() + bar.get_width()/2, val + time_stds[i] + text_offset, f'{val:.1f}', 
                 ha='center', va='bottom', fontweight='bold')
     
